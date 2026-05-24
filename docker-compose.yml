@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: agentforge-db
+    environment:
+      POSTGRES_USER: agentforge
+      POSTGRES_PASSWORD: agentforge_password
+      POSTGRES_DB: agentforge
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - agentforge-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentforge"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Restricts Docker socket access — app can only manage containers, not escalate
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy
+    container_name: agentforge-docker-proxy
+    environment:
+      CONTAINERS: 1
+      NETWORKS: 1
+      IMAGES: 1
+      EXEC: 1
+      POST: 1
+      BUILD: 1
+      INFO: 1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - agentforge-internal
+    restart: unless-stopped
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.app
+    container_name: agentforge-app
+    environment:
+      DATABASE_URL: postgresql://agentforge:agentforge_password@postgres:5432/agentforge
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      # Point Docker client at the restricted proxy
+      DOCKER_HOST: tcp://docker-proxy:2375
+      SANDBOX_IMAGE: ${SANDBOX_IMAGE:-agentforge-sandbox:latest}
+      SANDBOX_NETWORK: ${SANDBOX_NETWORK:-agentforge-sandbox-net}
+      SANDBOX_WORKSPACE_ROOT: /var/agentforge/workspaces
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      NVIDIA_NIM_API_KEY: ${NVIDIA_NIM_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      SERPAPI_KEY: ${SERPAPI_KEY:-}
+      BRAVE_SEARCH_KEY: ${BRAVE_SEARCH_KEY:-}
+    ports:
+      - "3000:3000"
+    volumes:
+      - agent_workspaces:/var/agentforge/workspaces
+    depends_on:
+      postgres:
+        condition: service_healthy
+      docker-proxy:
+        condition: service_started
+    networks:
+      - agentforge-internal
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  agent_workspaces:
+
+networks:
+  agentforge-internal:
+    driver: bridge
