@@ -46,7 +46,7 @@ export function LandingView() {
 
     try {
       if (isSignUp) {
-        // Register
+        // Register first
         const res = await fetch("/api/auth/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -60,7 +60,7 @@ export function LandingView() {
         }
       }
 
-      // Sign in via NextAuth
+      // Sign in via NextAuth — this sets the session cookie
       const result = await signIn("credentials", {
         email,
         password,
@@ -68,33 +68,30 @@ export function LandingView() {
       });
 
       if (result?.error) {
-        setError("Invalid credentials");
+        setError("Invalid email or password");
         setLoading(false);
         return;
       }
 
-      // Get user data from our login endpoint
-      const loginRes = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (loginRes.ok) {
-        const userData = await loginRes.json();
-        setUser({
-          id: userData.id,
-          name: userData.name,
-          email: userData.email,
-          role: userData.role,
-          plan: userData.plan,
-        });
-        setIsAuthenticated(true);
-        setView("dashboard");
-        setShowAuth(false);
-      } else {
-        setError("Login failed");
+      // Read user info from the session (cookie is now set)
+      const sessionRes = await fetch("/api/auth/session");
+      if (sessionRes.ok) {
+        const session = await sessionRes.json();
+        if (session?.user) {
+          setUser({
+            id: session.user.id,
+            name: session.user.name || "",
+            email: session.user.email || "",
+            role: session.user.role || "user",
+            plan: session.user.plan || "free",
+          });
+          setIsAuthenticated(true);
+          setView("dashboard");
+          setShowAuth(false);
+          return;
+        }
       }
+      setError("Login failed — please try again");
     } catch (err) {
       setError("Something went wrong");
     } finally {
@@ -104,43 +101,46 @@ export function LandingView() {
 
   const handleDemoLogin = async () => {
     setLoading(true);
+    setError("");
     try {
-      // Try to create demo user first
+      // Try to create demo user first (no-op if already exists)
       await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: "Demo User",
           email: "demo@agentforge.io",
-          password: "demo123",
+          password: "demo123456",
         }),
       });
 
       // Sign in via NextAuth
-      await signIn("credentials", {
+      const result = await signIn("credentials", {
         email: "demo@agentforge.io",
-        password: "demo123",
+        password: "demo123456",
         redirect: false,
       });
 
-      // Get user data
-      const loginRes = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: "demo@agentforge.io", password: "demo123" }),
-      });
+      if (result?.error) {
+        setError("Demo login failed");
+        return;
+      }
 
-      if (loginRes.ok) {
-        const userData = await loginRes.json();
-        setUser({
-          id: userData.id,
-          name: userData.name,
-          email: userData.email,
-          role: userData.role,
-          plan: userData.plan,
-        });
-        setIsAuthenticated(true);
-        setView("dashboard");
+      // Read from session
+      const sessionRes = await fetch("/api/auth/session");
+      if (sessionRes.ok) {
+        const session = await sessionRes.json();
+        if (session?.user) {
+          setUser({
+            id: session.user.id,
+            name: session.user.name || "Demo User",
+            email: session.user.email || "",
+            role: session.user.role || "user",
+            plan: session.user.plan || "free",
+          });
+          setIsAuthenticated(true);
+          setView("dashboard");
+        }
       }
     } catch (err) {
       setError("Demo login failed");
@@ -151,30 +151,33 @@ export function LandingView() {
 
   const handleAdminLogin = async () => {
     setLoading(true);
+    setError("");
     try {
-      await signIn("credentials", {
+      const result = await signIn("credentials", {
         email: "admin@agentforge.io",
-        password: "admin123",
+        password: "admin123456",
         redirect: false,
       });
 
-      const loginRes = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: "admin@agentforge.io", password: "admin123" }),
-      });
+      if (result?.error) {
+        setError("Admin login failed — create the admin account via the database first");
+        return;
+      }
 
-      if (loginRes.ok) {
-        const userData = await loginRes.json();
-        setUser({
-          id: userData.id,
-          name: userData.name,
-          email: userData.email,
-          role: userData.role,
-          plan: userData.plan,
-        });
-        setIsAuthenticated(true);
-        setView("dashboard");
+      const sessionRes = await fetch("/api/auth/session");
+      if (sessionRes.ok) {
+        const session = await sessionRes.json();
+        if (session?.user) {
+          setUser({
+            id: session.user.id,
+            name: session.user.name || "Admin",
+            email: session.user.email || "",
+            role: session.user.role || "admin",
+            plan: session.user.plan || "free",
+          });
+          setIsAuthenticated(true);
+          setView("dashboard");
+        }
       }
     } catch (err) {
       setError("Admin login failed");

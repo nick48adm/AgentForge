@@ -1,8 +1,8 @@
 'use client'
 
-import { useAppStore, UserInfo } from '@/lib/store'
+import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
-import { db } from '@/lib/db'
+import { signOut } from 'next-auth/react'
 import {
   Bot,
   Shield,
@@ -22,9 +22,11 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 
 export function Navbar() {
-  const { user, setView, setUser, setIsAuthenticated, setSidebarOpen } = useAppStore()
+  const { user, setView, setUser, setIsAuthenticated } = useAppStore()
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
+    // Clear next-auth session cookie properly
+    await signOut({ redirect: false })
     setUser(null)
     setIsAuthenticated(false)
     setView('landing')

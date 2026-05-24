@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { signIn } from 'next-auth/react'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -52,22 +53,30 @@ export function LandingView() {
         }
       }
 
-      // Login
-      const loginRes = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      })
-      const loginData = await loginRes.json()
-      if (!loginRes.ok) {
-        setError(loginData.error)
+      // Sign in via NextAuth to set the session cookie
+      const result = await signIn('credentials', { email, password, redirect: false })
+      if (result?.error) {
+        setError('Invalid email or password')
         setLoading(false)
         return
       }
 
-      setUser(loginData)
-      setIsAuthenticated(true)
-      setView('dashboard')
+      // Fetch user info from session (cookie is now set)
+      const sessionRes = await fetch('/api/auth/session')
+      const session = await sessionRes.json()
+      if (sessionRes.ok && session?.user) {
+        setUser({
+          id: session.user.id,
+          name: session.user.name || '',
+          email: session.user.email || '',
+          role: session.user.role || 'user',
+          plan: session.user.plan || 'free',
+        })
+        setIsAuthenticated(true)
+        setView('dashboard')
+      } else {
+        setError('Login failed — please try again')
+      }
     } catch (err: any) {
       setError('Something went wrong. Please try again.')
     }
@@ -77,22 +86,31 @@ export function LandingView() {
   const handleDemoLogin = async () => {
     setLoading(true)
     try {
-      // Create demo user if not exists
+      // Create demo user if not exists (409 is fine — already registered)
       await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: 'demo@agentforge.io', password: 'demo123', name: 'Demo User' }),
+        body: JSON.stringify({ email: 'demo@agentforge.io', password: 'demo123456', name: 'Demo User' }),
       })
 
-      const loginRes = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: 'demo@agentforge.io', password: 'demo123' }),
+      const result = await signIn('credentials', {
+        email: 'demo@agentforge.io',
+        password: 'demo123456',
+        redirect: false,
       })
-      const loginData = await loginRes.json()
 
-      if (loginRes.ok) {
-        setUser(loginData)
+      if (result?.error) { setLoading(false); return }
+
+      const sessionRes = await fetch('/api/auth/session')
+      const session = await sessionRes.json()
+      if (sessionRes.ok && session?.user) {
+        setUser({
+          id: session.user.id,
+          name: session.user.name || 'Demo User',
+          email: session.user.email || '',
+          role: session.user.role || 'user',
+          plan: session.user.plan || 'free',
+        })
         setIsAuthenticated(true)
         setView('dashboard')
       }
