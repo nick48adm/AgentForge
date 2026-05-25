@@ -77,6 +77,7 @@ export async function startSandbox(
     `-e GROQ_API_KEY=${process.env.GROQ_API_KEY || ''}`,
     `-e NVIDIA_NIM_API_KEY=${process.env.NVIDIA_NIM_API_KEY || ''}`,
     `-e OPENAI_API_KEY=${process.env.OPENAI_API_KEY || ''}`,
+    `-e ANTHROPIC_API_KEY=${process.env.ANTHROPIC_API_KEY || ''}`,
     `-e SERPAPI_KEY=${process.env.SERPAPI_KEY || ''}`,
     `-e BRAVE_SEARCH_KEY=${process.env.BRAVE_SEARCH_KEY || ''}`,
   ]
@@ -92,7 +93,6 @@ export async function startSandbox(
     '--security-opt no-new-privileges',
     '--cap-drop ALL',
     '--cap-add NET_BIND_SERVICE',
-    '--read-only',
     '--tmpfs /tmp:rw,noexec,nosuid,size=64m',
     `--volume ${workspaceDir}:/workspace:rw`,
     `--expose ${INTERNAL_PORT}`,

@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
           message,
           conversationHistory: messages.slice(-20),
           userId: auth.user.id,
-        })
+        }, (agent as any).sandboxSecret)
         assistantContent = result.content
         tokensIn = result.tokensIn
         tokensOut = result.tokensOut

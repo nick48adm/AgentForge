@@ -12,15 +12,23 @@ import {
 } from '@/components/ui/select';
 import { Loader2 } from 'lucide-react';
 
+// Default model: first Groq model (fastest, free tier)
 export const DEFAULT_MODEL = 'llama-3.3-70b-versatile';
+
+interface StaticModel {
+  id: string;
+  label: string;
+  description: string;
+}
 
 interface ModelsResponse {
   groq: { id: string; owned_by?: string }[];
-  nvidia_nim: { id: string; label: string; description: string }[];
+  nvidia_nim: StaticModel[];
+  openai: StaticModel[];
+  anthropic: StaticModel[];
 }
 
 function formatModelName(id: string): string {
-  // Convert model ID like 'llama-3.3-70b-versatile' to 'Llama 3.3 70B Versatile'
   return id
     .split(/[-_]/)
     .map(w => w.charAt(0).toUpperCase() + w.slice(1))
@@ -35,7 +43,7 @@ export function ModelSelector({ value, onChange }: { value: string; onChange: (v
       if (!res.ok) throw new Error('Failed to fetch models');
       return res.json();
     },
-    staleTime: 5 * 60 * 1000, // 5 min cache
+    staleTime: 5 * 60 * 1000,
   });
 
   return (
@@ -44,16 +52,17 @@ export function ModelSelector({ value, onChange }: { value: string; onChange: (v
         {isLoading ? (
           <div className="flex items-center gap-2 text-muted-foreground">
             <Loader2 className="h-3 w-3 animate-spin" />
-            Loading models...
+            Loading models…
           </div>
         ) : (
           <SelectValue placeholder="Select a model" />
         )}
       </SelectTrigger>
       <SelectContent>
+        {/* Groq — live list from API */}
         {data?.groq && data.groq.length > 0 && (
           <SelectGroup>
-            <SelectLabel className="text-xs font-semibold text-emerald-600">Groq</SelectLabel>
+            <SelectLabel className="text-xs font-semibold text-emerald-600">Groq (Free)</SelectLabel>
             {data.groq.map((model) => (
               <SelectItem key={model.id} value={model.id}>
                 <div className="flex flex-col">
@@ -66,6 +75,38 @@ export function ModelSelector({ value, onChange }: { value: string; onChange: (v
             ))}
           </SelectGroup>
         )}
+
+        {/* OpenAI */}
+        {data?.openai && data.openai.length > 0 && (
+          <SelectGroup>
+            <SelectLabel className="text-xs font-semibold text-blue-600">OpenAI</SelectLabel>
+            {data.openai.map((model) => (
+              <SelectItem key={model.id} value={model.id}>
+                <div className="flex flex-col">
+                  <span className="font-medium">{model.label}</span>
+                  <span className="text-xs text-muted-foreground">{model.description}</span>
+                </div>
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        )}
+
+        {/* Anthropic */}
+        {data?.anthropic && data.anthropic.length > 0 && (
+          <SelectGroup>
+            <SelectLabel className="text-xs font-semibold text-orange-600">Anthropic</SelectLabel>
+            {data.anthropic.map((model) => (
+              <SelectItem key={model.id} value={model.id}>
+                <div className="flex flex-col">
+                  <span className="font-medium">{model.label}</span>
+                  <span className="text-xs text-muted-foreground">{model.description}</span>
+                </div>
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        )}
+
+        {/* NVIDIA NIM */}
         {data?.nvidia_nim && data.nvidia_nim.length > 0 && (
           <SelectGroup>
             <SelectLabel className="text-xs font-semibold text-green-600">NVIDIA NIM</SelectLabel>

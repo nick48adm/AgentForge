@@ -12,13 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { ModelSelector } from '@/components/shared/ModelSelector'
 import {
   Dialog,
   DialogContent,
@@ -79,15 +73,6 @@ const AVAILABLE_TOOLS = [
   { id: 'web_search', name: 'Web Search', icon: Globe, description: 'Search the internet for information' },
   { id: 'calendar', name: 'Calendar', icon: Settings, description: 'Access calendar events' },
   { id: 'webhook', name: 'Custom Webhook', icon: Webhook, description: 'Send data to external APIs' },
-]
-
-const AVAILABLE_MODELS = [
-  { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B (Groq)' },
-  { id: 'mixtral-8x7b-32768', name: 'Mixtral 8x7B (Groq)' },
-  { id: 'moonshotai/kimi-k2.6', name: 'Kimi 2.6 (NIM)' },
-  { id: 'z-ai/glm-5.1', name: 'GLM 5.1 (NIM)' },
-  { id: 'deepseek-ai/deepseek-v4-pro', name: 'DeepSeek V4 Pro (NIM)' },
-  { id: 'deepseek-ai/deepseek-v4-flash', name: 'DeepSeek V4 Flash (NIM)' },
 ]
 
 export function BuilderView() {
@@ -234,6 +219,21 @@ export function BuilderView() {
     setChatMessages((prev) => [...prev, userMsg])
     setChatInput('')
     setChatLoading(true)
+
+    // Auto-save the current config (including model) before chatting
+    // so the chat API always uses the latest UI-selected model.
+    try {
+      await fetch(`/api/agents/${selectedAgentId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': user.id,
+        },
+        body: JSON.stringify({ name, description, systemPrompt, model, temperature, tools }),
+      })
+    } catch {
+      // If the save fails, continue with whatever model is in DB.
+    }
 
     try {
       const res = await fetch('/api/chat', {
@@ -504,18 +504,12 @@ export function BuilderView() {
                 {/* Model */}
                 <div className="space-y-2">
                   <Label className="text-sm font-medium">Model</Label>
-                  <Select value={model} onValueChange={setModel}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {AVAILABLE_MODELS.map((m) => (
-                        <SelectItem key={m.id} value={m.id}>
-                          {m.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <ModelSelector value={model} onChange={(newModel) => {
+                    setModel(newModel)
+                    // Reset chat when model changes so the new model starts fresh
+                    setChatMessages([])
+                    setConversationId(null)
+                  }} />
                 </div>
 
                 {/* Temperature */}

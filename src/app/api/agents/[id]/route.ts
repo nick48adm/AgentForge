@@ -63,8 +63,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (updateData.systemPrompt !== undefined) sandboxUpdate.systemPrompt = updateData.systemPrompt
       if (updateData.temperature !== undefined) sandboxUpdate.temperature = updateData.temperature
       if (updateData.tools !== undefined) sandboxUpdate.tools = updateData.tools
+      if (updateData.model !== undefined) sandboxUpdate.model = updateData.model
       if (Object.keys(sandboxUpdate).length > 0) {
-        reconfigureSandbox(existing.sandboxUrl, sandboxUpdate).catch(e =>
+        reconfigureSandbox(existing.sandboxUrl, sandboxUpdate, (existing as any).sandboxSecret).catch(e =>
           console.error('[agent-patch] reconfigure failed:', e)
         )
       }

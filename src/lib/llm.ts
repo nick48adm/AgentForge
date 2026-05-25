@@ -1,7 +1,8 @@
 /**
  * llm.ts
  * Unified LLM provider module.
- * Routes model requests to Groq, NVIDIA NIM, or OpenAI based on model name.
+ * Routes model requests to the correct provider based on model name.
+ * Supports: Groq, NVIDIA NIM, OpenAI, Anthropic
  */
 
 const NIM_MODELS = [
@@ -11,23 +12,36 @@ const NIM_MODELS = [
   'deepseek-ai/deepseek-v4-flash',
 ]
 
-const GROQ_PREFIXES = [
-  'llama', 'mixtral', 'gemma', 'whisper', 'distil-whisper',
-  'llava', 'qwen', 'deepseek', 'mistral', 'allam',
+const ANTHROPIC_MODELS = [
+  'claude-opus-4-5',
+  'claude-sonnet-4-5',
+  'claude-haiku-4-5',
+  'claude-opus-4',
+  'claude-sonnet-4',
 ]
 
-export type LLMProvider = 'groq' | 'nvidia-nim' | 'openai'
+const GROQ_PREFIXES = [
+  'llama', 'mixtral', 'gemma', 'llava', 'qwen', 'deepseek', 'mistral', 'allam',
+]
+
+const OPENAI_PREFIXES = ['gpt-', 'o1', 'o3', 'o4']
+
+export type LLMProvider = 'groq' | 'nvidia-nim' | 'openai' | 'anthropic'
 
 export function getProviderForModel(model: string): LLMProvider {
+  // Explicit lists take priority
   if (NIM_MODELS.includes(model)) return 'nvidia-nim'
+  if (ANTHROPIC_MODELS.some(m => model.startsWith(m))) return 'anthropic'
 
   const lower = model.toLowerCase()
   if (GROQ_PREFIXES.some(p => lower.startsWith(p))) return 'groq'
+  if (OPENAI_PREFIXES.some(p => lower.startsWith(p))) return 'openai'
 
-  // Fallback: if GROQ_API_KEY is set and model doesn't look like an OpenAI model, use Groq
-  if (process.env.GROQ_API_KEY && !lower.startsWith('gpt-') && !lower.startsWith('o1') && !lower.startsWith('o3') && !lower.startsWith('o4')) {
-    return 'groq'
-  }
+  // Unknown model: pick from available keys in priority order
+  if (process.env.OPENAI_API_KEY) return 'openai'
+  if (process.env.GROQ_API_KEY) return 'groq'
+  if (process.env.NVIDIA_NIM_API_KEY) return 'nvidia-nim'
+  if (process.env.ANTHROPIC_API_KEY) return 'anthropic'
 
   return 'openai'
 }
@@ -49,6 +63,55 @@ function getEndpointAndKey(provider: LLMProvider): { endpoint: string; apiKey: s
         endpoint: 'https://api.openai.com/v1/chat/completions',
         apiKey: process.env.OPENAI_API_KEY || '',
       }
+    case 'anthropic':
+      return {
+        endpoint: 'https://api.anthropic.com/v1/messages',
+        apiKey: process.env.ANTHROPIC_API_KEY || '',
+      }
+  }
+}
+
+async function anthropicChatCompletion(
+  model: string,
+  messages: any[],
+  temperature: number,
+  apiKey: string
+): Promise<{ content: string; tokensIn: number; tokensOut: number }> {
+  // Separate system message from conversation
+  const systemMsg = messages.find(m => m.role === 'system')
+  const conversationMsgs = messages.filter(m => m.role !== 'system')
+
+  const body: any = {
+    model,
+    max_tokens: 4096,
+    temperature,
+    messages: conversationMsgs,
+  }
+  if (systemMsg) body.system = systemMsg.content
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(55000),
+  })
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`Anthropic API error ${res.status}: ${body}`)
+  }
+
+  const data = await res.json()
+  const text = data.content?.find((b: any) => b.type === 'text')?.text || ''
+
+  return {
+    content: text,
+    tokensIn: data.usage?.input_tokens || 0,
+    tokensOut: data.usage?.output_tokens || 0,
   }
 }
 
@@ -64,6 +127,12 @@ export async function chatCompletion(
     throw new Error(`No API key configured for provider "${provider}" (model: ${model})`)
   }
 
+  // Anthropic uses a different API shape
+  if (provider === 'anthropic') {
+    return anthropicChatCompletion(model, messages, temperature, apiKey)
+  }
+
+  // OpenAI-compatible API (Groq, NIM, OpenAI)
   const res = await fetch(endpoint, {
     method: 'POST',
     headers: {
