@@ -81,6 +81,8 @@ export function BuilderView() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [deploying, setDeploying] = useState(false)
+  const [deployError, setDeployError] = useState('')
+  const deployPollRef = useRef<NodeJS.Timeout | null>(null)
 
   // Builder form state
   const [name, setName] = useState('')
@@ -110,14 +112,20 @@ export function BuilderView() {
   const [knowledgeLoading, setKnowledgeLoading] = useState(false)
 
   useEffect(() => {
+    return () => {
+      if (deployPollRef.current) {
+        clearInterval(deployPollRef.current)
+        deployPollRef.current = null
+      }
+    }
+  }, [])
+
+  useEffect(() => {
     if (!selectedAgentId || !user?.id) return
     const aid = selectedAgentId
-    const uid = user.id
     const load = async () => {
       try {
-        const res = await fetch(`/api/agents/${aid}`, {
-          headers: { 'x-user-id': uid },
-        })
+        const res = await fetch(`/api/agents/${aid}`)
         if (res.ok) {
           const data = await res.json()
           setAgent(data)
@@ -184,27 +192,59 @@ export function BuilderView() {
     setSaving(false)
   }
 
+  const pollDeployStatus = () => {
+    if (deployPollRef.current) clearInterval(deployPollRef.current)
+    deployPollRef.current = setInterval(async () => {
+      if (!selectedAgentId) {
+        if (deployPollRef.current) {
+          clearInterval(deployPollRef.current)
+          deployPollRef.current = null
+        }
+        return
+      }
+      try {
+        const res = await fetch(`/api/agents/${selectedAgentId}`)
+        if (res.ok) {
+          const data = await res.json()
+          setAgent(data)
+          if (data.status !== 'deploying') {
+            if (deployPollRef.current) {
+              clearInterval(deployPollRef.current)
+              deployPollRef.current = null
+            }
+            setDeploying(false)
+          }
+        }
+      } catch {}
+    }, 2000)
+  }
+
   const handleDeploy = async () => {
     if (!selectedAgentId || !user?.id) return
+    setDeployError('')
     setDeploying(true)
     await handleSave()
     try {
-      await fetch(`/api/agents/${selectedAgentId}/deploy`, {
-        method: 'POST',
-        headers: { 'x-user-id': user.id },
-      })
+      const res = await fetch(`/api/agents/${selectedAgentId}/deploy`, { method: 'POST' })
+      if (!res.ok) {
+        const err = await res.json()
+        setDeployError(err.error || 'Deploy failed')
+        setDeploying(false)
+        return
+      }
       fetchAgent()
-    } catch {}
-    setDeploying(false)
+      pollDeployStatus()
+    } catch {
+      setDeployError('Network error — could not start deploy')
+      setDeploying(false)
+    }
   }
 
   const handleStop = async () => {
     if (!selectedAgentId || !user?.id) return
     try {
-      await fetch(`/api/agents/${selectedAgentId}/stop`, {
-        method: 'POST',
-        headers: { 'x-user-id': user.id },
-      })
+      const res = await fetch(`/api/agents/${selectedAgentId}/stop`, { method: 'POST' })
+      if (!res.ok) return
       fetchAgent()
     } catch {}
   }
@@ -418,6 +458,11 @@ export function BuilderView() {
             <X className="h-4 w-4 mr-1" />
             Stop
           </Button>
+        ) : agent.status === 'deploying' ? (
+          <Button size="sm" disabled className="bg-amber-500 text-white cursor-not-allowed">
+            <Loader2 className="h-4 w-4 animate-spin mr-1" />
+            Deploying…
+          </Button>
         ) : (
           <Button
             size="sm"
@@ -432,6 +477,9 @@ export function BuilderView() {
             )}
             Publish
           </Button>
+        )}
+        {deployError && (
+          <span className="text-xs text-red-500 ml-2">{deployError}</span>
         )}
       </div>
 

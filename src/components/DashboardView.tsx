@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -67,6 +67,16 @@ export function DashboardView() {
   const [createOpen, setCreateOpen] = useState(false)
   const [newAgentName, setNewAgentName] = useState('')
   const [creating, setCreating] = useState(false)
+  const deployPollRef = useRef<NodeJS.Timeout | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (deployPollRef.current) {
+        clearInterval(deployPollRef.current)
+        deployPollRef.current = null
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (!user?.id) return
@@ -128,13 +138,41 @@ export function DashboardView() {
     } catch {}
   }
 
+  const startDeployPoll = () => {
+    if (deployPollRef.current) return
+    deployPollRef.current = setInterval(async () => {
+      if (!user?.id) {
+        if (deployPollRef.current) {
+          clearInterval(deployPollRef.current)
+          deployPollRef.current = null
+        }
+        return
+      }
+      try {
+        const res = await fetch('/api/agents', { headers: { 'x-user-id': user.id } })
+        if (res.ok) {
+          const data: Agent[] = await res.json()
+          setAgents(data)
+          const hasDeploying = data.some(a => a.status === 'deploying')
+          if (!hasDeploying && deployPollRef.current) {
+            clearInterval(deployPollRef.current)
+            deployPollRef.current = null
+          }
+        }
+      } catch {}
+    }, 2000)
+  }
+
   const handleDeployAgent = async (id: string) => {
     try {
-      await fetch(`/api/agents/${id}/deploy`, {
+      const res = await fetch(`/api/agents/${id}/deploy`, {
         method: 'POST',
         headers: { 'x-user-id': user?.id || '' },
       })
-      fetchAgents()
+      if (res.ok) {
+        fetchAgents()
+        startDeployPoll()
+      }
     } catch {}
   }
 
@@ -340,6 +378,11 @@ export function DashboardView() {
                           >
                             <Square className="h-4 w-4 mr-2" />
                             Stop
+                          </DropdownMenuItem>
+                        ) : agent.status === 'deploying' ? (
+                          <DropdownMenuItem disabled>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Deploying…
                           </DropdownMenuItem>
                         ) : (
                           <DropdownMenuItem

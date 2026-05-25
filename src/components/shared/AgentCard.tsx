@@ -100,6 +100,15 @@ export function AgentCard({
             >
               <StopCircle className="w-3 h-3" /> Stop
             </Button>
+          ) : agent.status === "deploying" ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs gap-1 text-amber-600 cursor-not-allowed"
+              disabled
+            >
+              <Send className="w-3 h-3" /> Deploying…
+            </Button>
           ) : (
             <Button
               variant="ghost"
