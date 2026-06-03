@@ -5,23 +5,20 @@ import { signIn } from 'next-auth/react'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import {
   Bot,
   Shield,
   MessageSquare,
-  Upload,
-  Rocket,
-  Zap,
-  Globe,
-  Lock,
   ArrowRight,
   Check,
   Send,
   Box,
-  Brain,
   Terminal,
+  Zap,
+  Cpu,
+  Lock,
 } from 'lucide-react'
 
 export function LandingView() {
@@ -53,7 +50,6 @@ export function LandingView() {
         }
       }
 
-      // Sign in via NextAuth to set the session cookie
       const result = await signIn('credentials', { email, password, redirect: false })
       if (result?.error) {
         setError('Invalid email or password')
@@ -61,7 +57,6 @@ export function LandingView() {
         return
       }
 
-      // Fetch user info from session (cookie is now set)
       const sessionRes = await fetch('/api/auth/session')
       const session = await sessionRes.json()
       if (sessionRes.ok && session?.user) {
@@ -86,7 +81,6 @@ export function LandingView() {
   const handleDemoLogin = async () => {
     setLoading(true)
     try {
-      // Demo account uses environment-configured credentials
       const demoEmail = process.env.NEXT_PUBLIC_DEMO_EMAIL || ''
       const demoPassword = process.env.NEXT_PUBLIC_DEMO_PASSWORD || ''
       
@@ -96,7 +90,6 @@ export function LandingView() {
         return
       }
 
-      // Create demo user if not exists (409 is fine — already registered)
       await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -131,49 +124,126 @@ export function LandingView() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
-      {/* Hero Section */}
-      <section className="relative overflow-hidden">
-        {/* Gradient Background */}
-        <div className="absolute inset-0 bg-gradient-to-br from-emerald-950/20 via-background to-slate-950/20" />
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] rounded-full bg-emerald-500/5 blur-3xl" />
-        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] rounded-full bg-slate-500/5 blur-3xl" />
+    <div className="min-h-screen flex flex-col bg-background">
+      {/* Navigation */}
+      <header className="fixed top-0 left-0 right-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-xl">
+        <div className="container mx-auto px-4 md:px-6 flex h-14 items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-foreground text-background">
+              <Bot className="h-3.5 w-3.5" />
+            </div>
+            <span className="font-semibold text-sm tracking-tight">AgentForge</span>
+          </div>
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" className="text-xs h-8">
+                Sign In
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-md">
+              <DialogHeader>
+                <DialogTitle>
+                  {loginMode === 'login' ? 'Welcome back' : 'Create account'}
+                </DialogTitle>
+                <DialogDescription>
+                  {loginMode === 'login'
+                    ? 'Sign in to your AgentForge account'
+                    : 'Create your free account to start building agents'}
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                {loginMode === 'register' && (
+                  <div>
+                    <Input
+                      placeholder="Full Name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                    />
+                  </div>
+                )}
+                <Input
+                  type="email"
+                  placeholder="Email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+                <Input
+                  type="password"
+                  placeholder="Password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+                {error && <p className="text-sm text-red-500">{error}</p>}
+                <Button
+                  type="submit"
+                  className="w-full bg-foreground text-background hover:bg-foreground/90"
+                  disabled={loading}
+                >
+                  {loading ? 'Loading...' : loginMode === 'login' ? 'Sign In' : 'Create Account'}
+                </Button>
+                <p className="text-xs text-center text-muted-foreground">
+                  {loginMode === 'login' ? "Don't have an account? " : 'Already have an account? '}
+                  <button
+                    type="button"
+                    className="text-foreground underline underline-offset-2 hover:text-foreground/80"
+                    onClick={() => {
+                      setLoginMode(loginMode === 'login' ? 'register' : 'login')
+                      setError('')
+                    }}
+                  >
+                    {loginMode === 'login' ? 'Sign up' : 'Sign in'}
+                  </button>
+                </p>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </header>
 
-        <div className="relative container mx-auto px-4 md:px-6 py-20 md:py-32">
-          <div className="max-w-4xl mx-auto text-center">
-            {/* Badge */}
-            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/5 px-4 py-1.5 text-sm text-emerald-400 mb-8">
-              <Rocket className="h-3.5 w-3.5" />
-              Self-hosted AI Agent Platform
+      {/* Hero */}
+      <section className="relative pt-32 pb-24 md:pt-44 md:pb-32">
+        {/* Subtle grid pattern */}
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,hsl(var(--border))_1px,transparent_1px),linear-gradient(to_bottom,hsl(var(--border))_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] opacity-50" />
+
+        <div className="relative container mx-auto px-4 md:px-6">
+          <div className="max-w-3xl mx-auto text-center">
+            {/* Eyebrow */}
+            <div className="inline-flex items-center gap-2 rounded-full border border-border bg-muted/50 px-3 py-1 text-xs text-muted-foreground mb-8 font-mono">
+              <span className="h-1.5 w-1.5 rounded-full bg-foreground animate-pulse" />
+              self-hosted ai agent platform
             </div>
 
             {/* Headline */}
-            <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-6">
-              Build Your Own{' '}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-emerald-600">
-                AI Agents
-              </span>
+            <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-6 leading-[1.1]">
+              Build agents
+              <br />
+              that actually work
             </h1>
 
             {/* Subtitle */}
-            <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-10">
+            <p className="text-base md:text-lg text-muted-foreground max-w-xl mx-auto mb-10 leading-relaxed">
               Create, configure, and deploy custom AI agents with isolated sandboxes,
-              knowledge bases, and Telegram integration. Like ChatGPT&apos;s GPTs, but self-hosted.
+              knowledge bases, and multi-channel integration. Self-hosted, fully controlled.
             </p>
 
-            {/* CTA Buttons */}
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            {/* CTA */}
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
               <Dialog>
                 <DialogTrigger asChild>
-                  <Button size="lg" className="bg-emerald-600 hover:bg-emerald-700 text-white px-8 h-12 text-base">
-                    Get Started Free
-                    <ArrowRight className="ml-2 h-4 w-4" />
+                  <Button
+                    size="lg"
+                    className="bg-foreground text-background hover:bg-foreground/90 px-6 h-11 text-sm font-medium"
+                  >
+                    Get Started
+                    <ArrowRight className="ml-2 h-3.5 w-3.5" />
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-md">
                   <DialogHeader>
                     <DialogTitle>
-                      {loginMode === 'login' ? 'Welcome Back' : 'Create Account'}
+                      {loginMode === 'login' ? 'Welcome back' : 'Create account'}
                     </DialogTitle>
                     <DialogDescription>
                       {loginMode === 'login'
@@ -208,7 +278,7 @@ export function LandingView() {
                     {error && <p className="text-sm text-red-500">{error}</p>}
                     <Button
                       type="submit"
-                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                      className="w-full bg-foreground text-background hover:bg-foreground/90"
                       disabled={loading}
                     >
                       {loading ? 'Loading...' : loginMode === 'login' ? 'Sign In' : 'Create Account'}
@@ -217,7 +287,7 @@ export function LandingView() {
                       {loginMode === 'login' ? "Don't have an account? " : 'Already have an account? '}
                       <button
                         type="button"
-                        className="text-emerald-500 hover:underline"
+                        className="text-foreground underline underline-offset-2 hover:text-foreground/80"
                         onClick={() => {
                           setLoginMode(loginMode === 'login' ? 'register' : 'login')
                           setError('')
@@ -232,150 +302,141 @@ export function LandingView() {
               <Button
                 variant="outline"
                 size="lg"
-                className="px-8 h-12 text-base"
+                className="px-6 h-11 text-sm font-medium"
                 onClick={handleDemoLogin}
                 disabled={loading}
               >
                 Try Demo
-                <Zap className="ml-2 h-4 w-4" />
+                <Zap className="ml-2 h-3.5 w-3.5" />
               </Button>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Architecture Layers */}
-      <section className="py-20 md:py-28 bg-muted/30">
+      {/* Architecture — clean grid */}
+      <section className="py-24 md:py-32">
         <div className="container mx-auto px-4 md:px-6">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">Six Layers of Power</h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto">
-              A complete architecture designed for security, scalability, and developer experience.
+          <div className="max-w-2xl mx-auto text-center mb-16">
+            <p className="text-xs font-mono text-muted-foreground tracking-widest uppercase mb-4">Architecture</p>
+            <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-4">
+              Six layers. Zero compromises.
+            </h2>
+            <p className="text-muted-foreground leading-relaxed">
+              A complete architecture designed for security, scalability, and developer experience — from the builder UI down to the sandboxed runtime.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-px max-w-4xl mx-auto bg-border rounded-lg overflow-hidden">
             {[
               {
-                icon: <MessageSquare className="h-6 w-6" />,
+                icon: <MessageSquare className="h-5 w-5" />,
                 title: 'Builder UI',
                 description: 'ChatGPT-like interface to configure your agent — name, personality, knowledge base, tools, and model settings.',
-                color: 'text-emerald-500',
-                bg: 'bg-emerald-500/10',
               },
               {
-                icon: <Globe className="h-6 w-6" />,
+                icon: <Cpu className="h-5 w-5" />,
                 title: 'API Gateway + Registry',
                 description: 'Handles auth, rate limiting, and routing. Agent Registry stores configs, versions, and ownership data.',
-                color: 'text-cyan-500',
-                bg: 'bg-cyan-500/10',
               },
               {
-                icon: <Box className="h-6 w-6" />,
+                icon: <Box className="h-5 w-5" />,
                 title: 'Sandboxed Runtime',
-                description: 'Each agent runs in its own isolated container — no shared memory, no cross-user access. Complete isolation.',
-                color: 'text-red-500',
-                bg: 'bg-red-500/10',
+                description: 'Each agent runs in its own isolated container — no shared memory, no cross-user access.',
               },
               {
-                icon: <Upload className="h-6 w-6" />,
+                icon: <Lock className="h-5 w-5" />,
                 title: 'Shared Infrastructure',
                 description: 'Postgres with row-level security, object storage per user, vector DB namespaced per tenant, job queues.',
-                color: 'text-amber-500',
-                bg: 'bg-amber-500/10',
               },
               {
-                icon: <Shield className="h-6 w-6" />,
+                icon: <Shield className="h-5 w-5" />,
                 title: 'Platform Services',
                 description: 'Auth with OAuth, Stripe billing with usage metering, per-container monitoring, and admin dashboard.',
-                color: 'text-violet-500',
-                bg: 'bg-violet-500/10',
               },
               {
-                icon: <Terminal className="h-6 w-6" />,
+                icon: <Terminal className="h-5 w-5" />,
                 title: 'Deploy Anywhere',
                 description: 'Docker Compose on a VPS for starters. Migrate to ECS/EKS when scaling. Same isolation guarantees everywhere.',
-                color: 'text-orange-500',
-                bg: 'bg-orange-500/10',
               },
             ].map((layer, i) => (
-              <Card key={i} className="border-border/50 hover:border-border transition-colors">
-                <CardHeader>
-                  <div className={`inline-flex h-12 w-12 items-center justify-center rounded-lg ${layer.bg} ${layer.color} mb-2`}>
+              <div
+                key={i}
+                className="bg-card p-6 group hover:bg-muted/50 transition-colors"
+              >
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="text-muted-foreground group-hover:text-foreground transition-colors">
                     {layer.icon}
                   </div>
-                  <CardTitle className="text-lg">Layer {i + 1} — {layer.title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-muted-foreground">{layer.description}</p>
-                </CardContent>
-              </Card>
+                  <span className="text-xs font-mono text-muted-foreground">0{i + 1}</span>
+                </div>
+                <h3 className="font-semibold text-sm mb-2">{layer.title}</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">{layer.description}</p>
+              </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Telegram Integration Highlight */}
-      <section className="py-20 md:py-28">
+      {/* Telegram Integration — split layout */}
+      <section className="py-24 md:py-32 border-t">
         <div className="container mx-auto px-4 md:px-6">
-          <div className="max-w-5xl mx-auto grid md:grid-cols-2 gap-12 items-center">
+          <div className="max-w-4xl mx-auto grid md:grid-cols-2 gap-16 items-center">
             <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-sky-500/20 bg-sky-500/5 px-4 py-1.5 text-sm text-sky-400 mb-6">
-                <Send className="h-3.5 w-3.5" />
-                Telegram Integration
-              </div>
-              <h2 className="text-3xl md:text-4xl font-bold mb-4">
-                Connect Your Agent to Telegram
+              <p className="text-xs font-mono text-muted-foreground tracking-widest uppercase mb-4">Integration</p>
+              <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-4">
+                Connect to Telegram
               </h2>
-              <p className="text-muted-foreground mb-6">
-                Just like Hermes Agent — connect your agent to Telegram using BotFather.
+              <p className="text-muted-foreground mb-8 leading-relaxed">
+                Connect your agent to Telegram using BotFather.
                 Your users can chat with your AI agent right from their phone, 24/7.
               </p>
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {[
                   'Create a bot via @BotFather in Telegram',
                   'Paste the bot token in your agent settings',
                   'Hit Publish — webhook is set up automatically',
                   'Your agent responds on Telegram in real-time',
                 ].map((step, i) => (
-                  <div key={i} className="flex items-center gap-3">
-                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500 text-xs font-bold">
+                  <div key={i} className="flex items-center gap-4">
+                    <span className="flex h-7 w-7 items-center justify-center rounded border border-border text-xs font-mono text-muted-foreground shrink-0">
                       {i + 1}
-                    </div>
+                    </span>
                     <span className="text-sm">{step}</span>
                   </div>
                 ))}
               </div>
             </div>
             <div className="relative">
-              <div className="rounded-2xl border border-border/50 bg-muted/30 p-6 space-y-4">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="h-10 w-10 rounded-full bg-sky-500 flex items-center justify-center text-white">
-                    <Send className="h-5 w-5" />
+              {/* Chat mockup */}
+              <div className="rounded-lg border border-border bg-card p-5 space-y-3">
+                <div className="flex items-center gap-2 mb-4 pb-3 border-b border-border">
+                  <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
+                    <Send className="h-3.5 w-3.5 text-foreground" />
                   </div>
                   <div>
-                    <div className="font-semibold text-sm">@MySupportBot</div>
-                    <div className="text-xs text-muted-foreground">online</div>
+                    <div className="font-medium text-xs">@MySupportBot</div>
+                    <div className="text-[10px] text-muted-foreground">online</div>
                   </div>
                 </div>
-                <div className="space-y-3">
+                <div className="space-y-2.5">
                   <div className="flex justify-end">
-                    <div className="bg-emerald-600 text-white rounded-2xl rounded-br-md px-4 py-2 max-w-[80%] text-sm">
+                    <div className="bg-foreground text-background rounded-lg rounded-br-sm px-3 py-2 max-w-[80%] text-xs">
                       How do I reset my password?
                     </div>
                   </div>
                   <div className="flex justify-start">
-                    <div className="bg-muted rounded-2xl rounded-bl-md px-4 py-2 max-w-[80%] text-sm">
-                      You can reset your password by clicking &quot;Forgot Password&quot; on the login page, or I can send you a reset link. Which would you prefer?
+                    <div className="bg-muted rounded-lg rounded-bl-sm px-3 py-2 max-w-[80%] text-xs">
+                      You can reset your password by clicking &quot;Forgot Password&quot; on the login page, or I can send you a reset link.
                     </div>
                   </div>
                   <div className="flex justify-end">
-                    <div className="bg-emerald-600 text-white rounded-2xl rounded-br-md px-4 py-2 max-w-[80%] text-sm">
+                    <div className="bg-foreground text-background rounded-lg rounded-br-sm px-3 py-2 max-w-[80%] text-xs">
                       Send me the link please
                     </div>
                   </div>
                   <div className="flex justify-start">
-                    <div className="bg-muted rounded-2xl rounded-bl-md px-4 py-2 max-w-[80%] text-sm">
+                    <div className="bg-muted rounded-lg rounded-bl-sm px-3 py-2 max-w-[80%] text-xs">
                       Done! Check your email. The link expires in 24 hours.
                     </div>
                   </div>
@@ -386,33 +447,36 @@ export function LandingView() {
         </div>
       </section>
 
-      {/* Pricing */}
-      <section className="py-20 md:py-28 bg-muted/30">
+      {/* Pricing — minimal */}
+      <section className="py-24 md:py-32 border-t">
         <div className="container mx-auto px-4 md:px-6">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">Simple Pricing</h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto">
+          <div className="max-w-2xl mx-auto text-center mb-16">
+            <p className="text-xs font-mono text-muted-foreground tracking-widest uppercase mb-4">Pricing</p>
+            <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-4">
+              Simple. Predictable.
+            </h2>
+            <p className="text-muted-foreground leading-relaxed">
               Start free, scale as you grow. Self-hosted means you control the infrastructure costs.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-px max-w-4xl mx-auto bg-border rounded-lg overflow-hidden">
             {[
               {
                 name: 'Free',
                 price: '$0',
-                period: '/month',
+                period: '/mo',
                 features: ['1 Agent', '1,000 messages/mo', 'Basic models', 'Community support'],
                 cta: 'Get Started',
-                popular: false,
+                featured: false,
               },
               {
                 name: 'Pro',
                 price: '$29',
-                period: '/month',
+                period: '/mo',
                 features: ['10 Agents', '50,000 messages/mo', 'All models + custom', 'Telegram integration', 'Knowledge base uploads', 'Priority support'],
                 cta: 'Start Pro',
-                popular: true,
+                featured: true,
               },
               {
                 name: 'Enterprise',
@@ -420,44 +484,38 @@ export function LandingView() {
                 period: '',
                 features: ['Unlimited Agents', 'Unlimited messages', 'Custom model hosting', 'SSO/SAML', 'Dedicated support', 'SLA guarantee'],
                 cta: 'Contact Us',
-                popular: false,
+                featured: false,
               },
             ].map((plan, i) => (
-              <Card
+              <div
                 key={i}
-                className={`relative ${plan.popular ? 'border-emerald-500 shadow-lg shadow-emerald-500/10' : 'border-border/50'}`}
+                className={`bg-card p-6 flex flex-col ${plan.featured ? 'relative z-10' : ''}`}
               >
-                {plan.popular && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-emerald-600 text-white text-xs font-bold px-3 py-1 rounded-full">
-                    Most Popular
-                  </div>
+                {plan.featured && (
+                  <div className="absolute top-0 left-0 right-0 h-px bg-foreground" />
                 )}
-                <CardHeader className="text-center">
-                  <CardTitle>{plan.name}</CardTitle>
-                  <div className="mt-4">
-                    <span className="text-4xl font-bold">{plan.price}</span>
-                    <span className="text-muted-foreground">{plan.period}</span>
+                <div className="mb-6">
+                  <h3 className="font-semibold text-sm mb-3">{plan.name}</h3>
+                  <div className="flex items-baseline gap-0.5">
+                    <span className="text-3xl font-bold tracking-tight">{plan.price}</span>
+                    {plan.period && <span className="text-sm text-muted-foreground">{plan.period}</span>}
                   </div>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-3">
-                    {plan.features.map((feature, j) => (
-                      <li key={j} className="flex items-center gap-2 text-sm">
-                        <Check className="h-4 w-4 text-emerald-500 shrink-0" />
-                        {feature}
-                      </li>
-                    ))}
-                  </ul>
-                </CardContent>
-                <CardFooter>
-                  <Button
-                    className={`w-full ${plan.popular ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : ''}`}
-                    variant={plan.popular ? 'default' : 'outline'}
-                  >
-                    {plan.cta}
-                  </Button>
-                </CardFooter>
-              </Card>
+                </div>
+                <ul className="space-y-2.5 mb-8 flex-1">
+                  {plan.features.map((feature, j) => (
+                    <li key={j} className="flex items-center gap-2 text-xs">
+                      <Check className="h-3 w-3 text-muted-foreground shrink-0" />
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+                <Button
+                  className={`w-full text-xs h-9 ${plan.featured ? 'bg-foreground text-background hover:bg-foreground/90' : ''}`}
+                  variant={plan.featured ? 'default' : 'outline'}
+                >
+                  {plan.cta}
+                </Button>
+              </div>
             ))}
           </div>
         </div>
@@ -467,12 +525,12 @@ export function LandingView() {
       <footer className="border-t py-8">
         <div className="container mx-auto px-4 md:px-6 flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <div className="flex h-6 w-6 items-center justify-center rounded bg-emerald-600 text-white">
-              <Bot className="h-3 w-3" />
+            <div className="flex h-5 w-5 items-center justify-center rounded bg-foreground text-background">
+              <Bot className="h-2.5 w-2.5" />
             </div>
-            <span className="font-semibold text-sm">AgentForge</span>
+            <span className="font-medium text-xs">AgentForge</span>
           </div>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-[11px] text-muted-foreground">
             Self-hosted AI agent builder. Open source and production ready.
           </p>
         </div>

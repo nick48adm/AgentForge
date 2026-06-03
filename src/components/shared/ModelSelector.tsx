@@ -48,27 +48,27 @@ export function ModelSelector({ value, onChange }: { value: string; onChange: (v
 
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="w-full">
+      <SelectTrigger className="w-full h-8 text-xs">
         {isLoading ? (
           <div className="flex items-center gap-2 text-muted-foreground">
             <Loader2 className="h-3 w-3 animate-spin" />
-            Loading models…
+            Loading models...
           </div>
         ) : (
           <SelectValue placeholder="Select a model" />
         )}
       </SelectTrigger>
       <SelectContent>
-        {/* Groq — live list from API */}
+        {/* Groq */}
         {data?.groq && data.groq.length > 0 && (
           <SelectGroup>
-            <SelectLabel className="text-xs font-semibold text-emerald-600">Groq (Free)</SelectLabel>
+            <SelectLabel className="text-[10px] font-semibold text-muted-foreground">Groq (Free)</SelectLabel>
             {data.groq.map((model) => (
               <SelectItem key={model.id} value={model.id}>
                 <div className="flex flex-col">
-                  <span className="font-medium">{formatModelName(model.id)}</span>
+                  <span className="text-xs font-medium">{formatModelName(model.id)}</span>
                   {model.owned_by && (
-                    <span className="text-xs text-muted-foreground">{model.owned_by}</span>
+                    <span className="text-[10px] text-muted-foreground">{model.owned_by}</span>
                   )}
                 </div>
               </SelectItem>
@@ -79,12 +79,12 @@ export function ModelSelector({ value, onChange }: { value: string; onChange: (v
         {/* OpenAI */}
         {data?.openai && data.openai.length > 0 && (
           <SelectGroup>
-            <SelectLabel className="text-xs font-semibold text-blue-600">OpenAI</SelectLabel>
+            <SelectLabel className="text-[10px] font-semibold text-muted-foreground">OpenAI</SelectLabel>
             {data.openai.map((model) => (
               <SelectItem key={model.id} value={model.id}>
                 <div className="flex flex-col">
-                  <span className="font-medium">{model.label}</span>
-                  <span className="text-xs text-muted-foreground">{model.description}</span>
+                  <span className="text-xs font-medium">{model.label}</span>
+                  <span className="text-[10px] text-muted-foreground">{model.description}</span>
                 </div>
               </SelectItem>
             ))}
@@ -94,12 +94,12 @@ export function ModelSelector({ value, onChange }: { value: string; onChange: (v
         {/* Anthropic */}
         {data?.anthropic && data.anthropic.length > 0 && (
           <SelectGroup>
-            <SelectLabel className="text-xs font-semibold text-orange-600">Anthropic</SelectLabel>
+            <SelectLabel className="text-[10px] font-semibold text-muted-foreground">Anthropic</SelectLabel>
             {data.anthropic.map((model) => (
               <SelectItem key={model.id} value={model.id}>
                 <div className="flex flex-col">
-                  <span className="font-medium">{model.label}</span>
-                  <span className="text-xs text-muted-foreground">{model.description}</span>
+                  <span className="text-xs font-medium">{model.label}</span>
+                  <span className="text-[10px] text-muted-foreground">{model.description}</span>
                 </div>
               </SelectItem>
             ))}
@@ -109,12 +109,12 @@ export function ModelSelector({ value, onChange }: { value: string; onChange: (v
         {/* NVIDIA NIM */}
         {data?.nvidia_nim && data.nvidia_nim.length > 0 && (
           <SelectGroup>
-            <SelectLabel className="text-xs font-semibold text-green-600">NVIDIA NIM</SelectLabel>
+            <SelectLabel className="text-[10px] font-semibold text-muted-foreground">NVIDIA NIM</SelectLabel>
             {data.nvidia_nim.map((model) => (
               <SelectItem key={model.id} value={model.id}>
                 <div className="flex flex-col">
-                  <span className="font-medium">{model.label}</span>
-                  <span className="text-xs text-muted-foreground">{model.description}</span>
+                  <span className="text-xs font-medium">{model.label}</span>
+                  <span className="text-[10px] text-muted-foreground">{model.description}</span>
                 </div>
               </SelectItem>
             ))}

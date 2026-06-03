@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { ModelSelector } from '@/components/shared/ModelSelector'
@@ -145,9 +145,7 @@ export function BuilderView() {
   const fetchAgent = async () => {
     if (!selectedAgentId || !user?.id) return
     try {
-      const res = await fetch(`/api/agents/${selectedAgentId}`, {
-        
-      })
+      const res = await fetch(`/api/agents/${selectedAgentId}`)
       if (res.ok) {
         const data = await res.json()
         setAgent(data)
@@ -171,10 +169,7 @@ export function BuilderView() {
     try {
       const res = await fetch(`/api/agents/${selectedAgentId}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name,
           description,
@@ -260,28 +255,18 @@ export function BuilderView() {
     setChatInput('')
     setChatLoading(true)
 
-    // Auto-save the current config (including model) before chatting
-    // so the chat API always uses the latest UI-selected model.
     try {
       await fetch(`/api/agents/${selectedAgentId}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, description, systemPrompt, model, temperature, tools }),
       })
-    } catch {
-      // If the save fails, continue with whatever model is in DB.
-    }
+    } catch {}
 
     try {
       const res = await fetch('/api/chat', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           agentId: selectedAgentId,
           message: userMsg.content,
@@ -324,10 +309,7 @@ export function BuilderView() {
     try {
       const res = await fetch('/api/telegram/connect', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ agentId: selectedAgentId, botToken: telegramToken }),
       })
       const data = await res.json()
@@ -349,10 +331,7 @@ export function BuilderView() {
     try {
       await fetch('/api/telegram/disconnect', {
         method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ agentId: selectedAgentId }),
       })
       fetchAgent()
@@ -365,10 +344,7 @@ export function BuilderView() {
     try {
       await fetch('/api/knowledge', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           agentId: selectedAgentId,
           fileName: knowledgeName,
@@ -386,10 +362,7 @@ export function BuilderView() {
   const handleKnowledgeDelete = async (id: string) => {
     if (!user?.id) return
     try {
-      await fetch(`/api/knowledge/${id}`, {
-        method: 'DELETE',
-        
-      })
+      await fetch(`/api/knowledge/${id}`, { method: 'DELETE' })
       fetchAgent()
     } catch {}
     setKnowledgeLoading(false)
@@ -406,7 +379,7 @@ export function BuilderView() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-[60vh]">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
       </div>
     )
   }
@@ -414,9 +387,9 @@ export function BuilderView() {
   if (!agent) {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
-        <AlertCircle className="h-12 w-12 text-muted-foreground" />
-        <p className="text-muted-foreground">Agent not found</p>
-        <Button variant="outline" onClick={() => setView('dashboard')}>
+        <AlertCircle className="h-10 w-10 text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">Agent not found</p>
+        <Button variant="outline" size="sm" onClick={() => setView('dashboard')} className="text-xs h-8">
           Back to Dashboard
         </Button>
       </div>
@@ -424,24 +397,24 @@ export function BuilderView() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-56px)]">
+    <div className="flex flex-col h-[calc(100vh-52px)]">
       {/* Top Bar */}
       <div className="flex items-center gap-3 px-4 py-2 border-b bg-muted/30">
-        <Button variant="ghost" size="icon" onClick={() => setView('dashboard')} className="h-8 w-8">
-          <ArrowLeft className="h-4 w-4" />
+        <Button variant="ghost" size="icon" onClick={() => setView('dashboard')} className="h-7 w-7">
+          <ArrowLeft className="h-3.5 w-3.5" />
         </Button>
         <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-600 font-semibold text-sm">
+          <div className="h-7 w-7 rounded-md bg-muted flex items-center justify-center text-xs font-semibold">
             {name.charAt(0).toUpperCase() || '?'}
           </div>
           <div>
-            <h2 className="font-semibold text-sm">{name || 'Untitled Agent'}</h2>
-            <p className="text-xs text-muted-foreground">
+            <h2 className="font-medium text-xs">{name || 'Untitled Agent'}</h2>
+            <p className="text-[10px] text-muted-foreground font-mono">
               {model} · v{agent.version} ·{' '}
               <span className={
-                agent.status === 'published' ? 'text-emerald-500' :
-                agent.status === 'deploying' ? 'text-amber-500' :
-                agent.status === 'stopped' ? 'text-red-500' : 'text-slate-500'
+                agent.status === 'published' ? 'text-foreground' :
+                agent.status === 'deploying' ? 'text-muted-foreground' :
+                agent.status === 'stopped' ? 'text-red-400' : 'text-muted-foreground'
               }>
                 {agent.status}
               </span>
@@ -449,46 +422,46 @@ export function BuilderView() {
           </div>
         </div>
         <div className="flex-1" />
-        <Button variant="outline" size="sm" onClick={handleSave} disabled={saving}>
-          {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Save className="h-4 w-4 mr-1" />}
+        <Button variant="outline" size="sm" onClick={handleSave} disabled={saving} className="h-7 text-[11px]">
+          {saving ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Save className="h-3 w-3 mr-1" />}
           Save
         </Button>
         {agent.status === 'published' ? (
-          <Button variant="outline" size="sm" onClick={handleStop} className="text-red-600">
-            <X className="h-4 w-4 mr-1" />
+          <Button variant="outline" size="sm" onClick={handleStop} className="h-7 text-[11px] text-red-400">
+            <X className="h-3 w-3 mr-1" />
             Stop
           </Button>
         ) : agent.status === 'deploying' ? (
-          <Button size="sm" disabled className="bg-amber-500 text-white cursor-not-allowed">
-            <Loader2 className="h-4 w-4 animate-spin mr-1" />
-            Deploying…
+          <Button size="sm" disabled className="h-7 text-[11px] bg-muted text-muted-foreground cursor-not-allowed">
+            <Loader2 className="h-3 w-3 animate-spin mr-1" />
+            Deploying...
           </Button>
         ) : (
           <Button
             size="sm"
-            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            className="bg-foreground text-background hover:bg-foreground/90 h-7 text-[11px]"
             onClick={handleDeploy}
             disabled={deploying}
           >
             {deploying ? (
-              <Loader2 className="h-4 w-4 animate-spin mr-1" />
+              <Loader2 className="h-3 w-3 animate-spin mr-1" />
             ) : (
-              <Rocket className="h-4 w-4 mr-1" />
+              <Rocket className="h-3 w-3 mr-1" />
             )}
             Publish
           </Button>
         )}
         {deployError && (
-          <span className="text-xs text-red-500 ml-2">{deployError}</span>
+          <span className="text-[10px] text-red-400 ml-2">{deployError}</span>
         )}
       </div>
 
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden flex-col lg:flex-row">
         {/* Left Panel — Settings */}
-        <div className="w-full lg:w-[420px] border-r overflow-y-auto bg-background">
+        <div className="w-full lg:w-[400px] border-r overflow-y-auto bg-background">
           {/* Tab Navigation */}
-          <div className="flex border-b px-2 pt-2">
+          <div className="flex border-b px-2 pt-1.5">
             {[
               { id: 'config' as const, label: 'Config', icon: Settings },
               { id: 'knowledge' as const, label: 'Knowledge', icon: FileText },
@@ -497,13 +470,13 @@ export function BuilderView() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+                className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium border-b-2 transition-colors ${
                   activeTab === tab.id
-                    ? 'border-emerald-500 text-emerald-600'
-                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                    ? 'border-foreground text-foreground'
+                    : 'border-transparent text-muted-foreground hover:text-foreground/70'
                 }`}
               >
-                <tab.icon className="h-4 w-4" />
+                <tab.icon className="h-3.5 w-3.5" />
                 {tab.label}
               </button>
             ))}
@@ -514,57 +487,58 @@ export function BuilderView() {
             {activeTab === 'config' && (
               <>
                 {/* Name */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Agent Name</Label>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">Agent Name</Label>
                   <Input
                     placeholder="e.g., Support Bot"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
+                    className="h-8 text-sm"
                   />
                 </div>
 
                 {/* Description */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Description</Label>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">Description</Label>
                   <Textarea
                     placeholder="What does this agent do?"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     rows={2}
+                    className="text-sm"
                   />
                 </div>
 
                 {/* System Prompt */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">System Prompt / Personality</Label>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">System Prompt / Personality</Label>
                   <Textarea
                     placeholder="You are a helpful customer support agent for Acme Inc. You are friendly, professional, and always provide accurate information..."
                     value={systemPrompt}
                     onChange={(e) => setSystemPrompt(e.target.value)}
                     rows={6}
-                    className="font-mono text-sm"
+                    className="font-mono text-xs"
                   />
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-[10px] text-muted-foreground">
                     {systemPrompt.length} characters
                   </p>
                 </div>
 
                 {/* Model */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Model</Label>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">Model</Label>
                   <ModelSelector value={model} onChange={(newModel) => {
                     setModel(newModel)
-                    // Reset chat when model changes so the new model starts fresh
                     setChatMessages([])
                     setConversationId(null)
                   }} />
                 </div>
 
                 {/* Temperature */}
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <Label className="text-sm font-medium">Temperature</Label>
-                    <span className="text-sm text-muted-foreground">{temperature.toFixed(1)}</span>
+                    <Label className="text-xs font-medium">Temperature</Label>
+                    <span className="text-xs text-muted-foreground font-mono">{temperature.toFixed(1)}</span>
                   </div>
                   <Slider
                     value={[temperature]}
@@ -573,25 +547,25 @@ export function BuilderView() {
                     max={2}
                     step={0.1}
                   />
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-[10px] text-muted-foreground">
                     Lower = more focused, Higher = more creative
                   </p>
                 </div>
 
                 {/* Tools */}
-                <div className="space-y-3">
-                  <Label className="text-sm font-medium">Tools</Label>
-                  <div className="space-y-2">
+                <div className="space-y-2">
+                  <Label className="text-xs font-medium">Tools</Label>
+                  <div className="space-y-1.5">
                     {AVAILABLE_TOOLS.map((tool) => (
                       <div
                         key={tool.id}
-                        className="flex items-center justify-between rounded-lg border p-3"
+                        className="flex items-center justify-between rounded-md border border-border/50 p-2.5"
                       >
-                        <div className="flex items-center gap-3">
-                          <tool.icon className="h-4 w-4 text-muted-foreground" />
+                        <div className="flex items-center gap-2.5">
+                          <tool.icon className="h-3.5 w-3.5 text-muted-foreground" />
                           <div>
-                            <div className="text-sm font-medium">{tool.name}</div>
-                            <div className="text-xs text-muted-foreground">{tool.description}</div>
+                            <div className="text-xs font-medium">{tool.name}</div>
+                            <div className="text-[10px] text-muted-foreground">{tool.description}</div>
                           </div>
                         </div>
                         <Switch
@@ -608,34 +582,36 @@ export function BuilderView() {
             {/* Knowledge Tab */}
             {activeTab === 'knowledge' && (
               <>
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Upload Knowledge</Label>
-                  <p className="text-xs text-muted-foreground">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">Upload Knowledge</Label>
+                  <p className="text-[10px] text-muted-foreground">
                     Add text content that your agent can reference. Each entry is stored in an isolated namespace.
                   </p>
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-2.5">
                   <Input
                     placeholder="Document name (e.g., FAQ, Product Docs)"
                     value={knowledgeName}
                     onChange={(e) => setKnowledgeName(e.target.value)}
+                    className="h-8 text-sm"
                   />
                   <Textarea
                     placeholder="Paste your knowledge base content here..."
                     value={knowledgeText}
                     onChange={(e) => setKnowledgeText(e.target.value)}
                     rows={6}
+                    className="text-sm"
                   />
                   <Button
                     onClick={handleKnowledgeUpload}
-                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                    className="w-full bg-foreground text-background hover:bg-foreground/90 h-8 text-xs"
                     disabled={knowledgeLoading || !knowledgeText.trim() || !knowledgeName.trim()}
                   >
                     {knowledgeLoading ? (
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      <Loader2 className="h-3 w-3 animate-spin mr-1.5" />
                     ) : (
-                      <Upload className="h-4 w-4 mr-2" />
+                      <Upload className="h-3 w-3 mr-1.5" />
                     )}
                     Upload Knowledge
                   </Button>
@@ -645,32 +621,32 @@ export function BuilderView() {
 
                 {/* Existing knowledge bases */}
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium">Uploaded Documents</Label>
+                  <Label className="text-xs font-medium">Uploaded Documents</Label>
                   {(!agent.knowledgeBases || agent.knowledgeBases.length === 0) ? (
-                    <p className="text-xs text-muted-foreground py-4 text-center">
+                    <p className="text-[10px] text-muted-foreground py-4 text-center">
                       No documents uploaded yet
                     </p>
                   ) : (
-                    <div className="space-y-2">
+                    <div className="space-y-1.5">
                       {agent.knowledgeBases.map((kb) => (
                         <div
                           key={kb.id}
-                          className="flex items-center justify-between rounded-lg border p-3"
+                          className="flex items-center justify-between rounded-md border border-border/50 p-2.5"
                         >
                           <div className="flex items-center gap-2">
-                            <FileText className="h-4 w-4 text-muted-foreground" />
+                            <FileText className="h-3.5 w-3.5 text-muted-foreground" />
                             <div>
-                              <div className="text-sm font-medium">{kb.fileName}</div>
-                              <div className="text-xs text-muted-foreground">{kb.fileType}</div>
+                              <div className="text-xs font-medium">{kb.fileName}</div>
+                              <div className="text-[10px] text-muted-foreground">{kb.fileType}</div>
                             </div>
                           </div>
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-8 w-8 text-red-500 hover:text-red-600"
+                            className="h-7 w-7 text-red-400 hover:text-red-500"
                             onClick={() => handleKnowledgeDelete(kb.id)}
                           >
-                            <Trash2 className="h-4 w-4" />
+                            <Trash2 className="h-3 w-3" />
                           </Button>
                         </div>
                       ))}
@@ -683,86 +659,71 @@ export function BuilderView() {
             {/* Telegram Tab */}
             {activeTab === 'telegram' && (
               <>
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Connect to Telegram</Label>
-                  <p className="text-xs text-muted-foreground">
-                    Connect your agent to a Telegram bot so users can chat with it from their phone, just like Hermes Agent.
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">Connect to Telegram</Label>
+                  <p className="text-[10px] text-muted-foreground">
+                    Connect your agent to a Telegram bot so users can chat with it from their phone.
                   </p>
                 </div>
 
                 {/* How to set up */}
-                <Card className="border-border/50">
-                  <CardContent className="p-4 space-y-3">
-                    <div className="text-sm font-medium">Setup Steps:</div>
-                    <ol className="space-y-2 text-xs text-muted-foreground">
-                      <li className="flex gap-2">
-                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500 text-xs font-bold">
-                          1
+                <div className="rounded-md border border-border/50 p-3 space-y-2">
+                  <div className="text-xs font-medium">Setup Steps:</div>
+                  <ol className="space-y-1.5 text-[10px] text-muted-foreground">
+                    {[
+                      'Open Telegram and search for @BotFather',
+                      'Send /newbot and follow the prompts',
+                      'Copy the bot token BotFather gives you',
+                      'Paste it below and click Connect',
+                    ].map((step, i) => (
+                      <li key={i} className="flex gap-2">
+                        <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-border text-[9px] font-mono">
+                          {i + 1}
                         </span>
-                        Open Telegram and search for @BotFather
+                        {step}
                       </li>
-                      <li className="flex gap-2">
-                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500 text-xs font-bold">
-                          2
-                        </span>
-                        Send /newbot and follow the prompts
-                      </li>
-                      <li className="flex gap-2">
-                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500 text-xs font-bold">
-                          3
-                        </span>
-                        Copy the bot token BotFather gives you
-                      </li>
-                      <li className="flex gap-2">
-                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500 text-xs font-bold">
-                          4
-                        </span>
-                        Paste it below and click Connect
-                      </li>
-                    </ol>
-                  </CardContent>
-                </Card>
+                    ))}
+                  </ol>
+                </div>
 
                 {/* Current connection status */}
                 {agent.telegramConnection ? (
-                  <Card className="border-emerald-500/30">
-                    <CardContent className="p-4">
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="h-10 w-10 rounded-full bg-sky-500 flex items-center justify-center text-white">
-                          <TelegramIcon className="h-5 w-5" />
-                        </div>
-                        <div>
-                          <div className="font-medium text-sm">
-                            @{agent.telegramConnection.botUsername || 'Unknown Bot'}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {agent.telegramConnection.botName || 'Telegram Bot'}
-                          </div>
-                        </div>
-                        <Badge
-                          variant="secondary"
-                          className={
-                            agent.telegramConnection.isActive
-                              ? 'bg-emerald-500/10 text-emerald-500 ml-auto'
-                              : 'bg-amber-500/10 text-amber-500 ml-auto'
-                          }
-                        >
-                          {agent.telegramConnection.isActive ? 'Active' : 'Pending'}
-                        </Badge>
+                  <div className="rounded-md border border-border/50 p-3">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
+                        <TelegramIcon className="h-3.5 w-3.5" />
                       </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full text-red-600 hover:text-red-700"
-                        onClick={handleTelegramDisconnect}
+                      <div>
+                        <div className="font-medium text-xs">
+                          @{agent.telegramConnection.botUsername || 'Unknown Bot'}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">
+                          {agent.telegramConnection.botName || 'Telegram Bot'}
+                        </div>
+                      </div>
+                      <Badge
+                        variant="secondary"
+                        className={
+                          agent.telegramConnection.isActive
+                            ? 'bg-foreground text-background ml-auto text-[10px]'
+                            : 'bg-muted text-muted-foreground ml-auto text-[10px]'
+                        }
                       >
-                        <X className="h-4 w-4 mr-1" />
-                        Disconnect Bot
-                      </Button>
-                    </CardContent>
-                  </Card>
+                        {agent.telegramConnection.isActive ? 'Active' : 'Pending'}
+                      </Badge>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full text-red-400 hover:text-red-500 h-7 text-[11px]"
+                      onClick={handleTelegramDisconnect}
+                    >
+                      <X className="h-3 w-3 mr-1" />
+                      Disconnect Bot
+                    </Button>
+                  </div>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-2.5">
                     <Input
                       placeholder="Paste your Telegram bot token..."
                       value={telegramToken}
@@ -772,35 +733,36 @@ export function BuilderView() {
                         setTelegramSuccess('')
                       }}
                       type="password"
+                      className="h-8 text-sm"
                     />
                     {telegramError && (
-                      <p className="text-xs text-red-500 flex items-center gap-1">
+                      <p className="text-[10px] text-red-400 flex items-center gap-1">
                         <AlertCircle className="h-3 w-3" />
                         {telegramError}
                       </p>
                     )}
                     {telegramSuccess && (
-                      <p className="text-xs text-emerald-500 flex items-center gap-1">
+                      <p className="text-[10px] text-foreground flex items-center gap-1">
                         <Check className="h-3 w-3" />
                         {telegramSuccess}
                       </p>
                     )}
                     <Button
                       onClick={handleTelegramConnect}
-                      className="w-full bg-sky-500 hover:bg-sky-600 text-white"
+                      className="w-full bg-foreground text-background hover:bg-foreground/90 h-8 text-xs"
                       disabled={telegramConnecting || !telegramToken.trim()}
                     >
                       {telegramConnecting ? (
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        <Loader2 className="h-3 w-3 animate-spin mr-1.5" />
                       ) : (
-                        <TelegramIcon className="h-4 w-4 mr-2" />
+                        <TelegramIcon className="h-3 w-3 mr-1.5" />
                       )}
                       Connect Bot
                     </Button>
                   </div>
                 )}
 
-                <p className="text-xs text-muted-foreground">
+                <p className="text-[10px] text-muted-foreground">
                   The webhook will be automatically configured when you publish your agent.
                   Messages sent to your Telegram bot will be forwarded to this agent.
                 </p>
@@ -810,15 +772,15 @@ export function BuilderView() {
         </div>
 
         {/* Right Panel — Chat Preview */}
-        <div className="flex-1 flex flex-col bg-muted/20">
+        <div className="flex-1 flex flex-col bg-muted/10">
           {/* Chat Header */}
-          <div className="flex items-center gap-3 px-4 py-3 border-b bg-background">
-            <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-              <Sparkles className="h-4 w-4 text-emerald-500" />
+          <div className="flex items-center gap-3 px-4 py-2.5 border-b bg-background">
+            <div className="h-7 w-7 rounded-md bg-muted flex items-center justify-center">
+              <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
             </div>
             <div>
-              <h3 className="text-sm font-medium">Chat Preview</h3>
-              <p className="text-xs text-muted-foreground">Test your agent before publishing</p>
+              <h3 className="text-xs font-medium">Chat Preview</h3>
+              <p className="text-[10px] text-muted-foreground">Test your agent before publishing</p>
             </div>
           </div>
 
@@ -826,16 +788,16 @@ export function BuilderView() {
           <ScrollArea className="flex-1 p-4">
             {chatMessages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center py-20">
-                <div className="h-16 w-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center mb-4">
-                  <Bot className="h-8 w-8 text-emerald-500" />
+                <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center mb-4">
+                  <Bot className="h-5 w-5 text-muted-foreground" />
                 </div>
-                <h3 className="font-semibold mb-1">{name || 'Your Agent'}</h3>
-                <p className="text-sm text-muted-foreground max-w-sm">
+                <h3 className="text-sm font-medium mb-1">{name || 'Your Agent'}</h3>
+                <p className="text-xs text-muted-foreground max-w-sm">
                   Start a conversation to test how your agent responds. Configure its personality in the settings panel.
                 </p>
               </div>
             ) : (
-              <div className="space-y-4 max-w-2xl mx-auto">
+              <div className="space-y-3 max-w-2xl mx-auto">
                 {chatMessages.map((msg, i) => (
                   <div
                     key={i}
@@ -845,23 +807,23 @@ export function BuilderView() {
                       className={`flex gap-2 max-w-[80%] ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}
                     >
                       <div
-                        className={`h-7 w-7 rounded-full flex items-center justify-center shrink-0 ${
+                        className={`h-6 w-6 rounded-full flex items-center justify-center shrink-0 ${
                           msg.role === 'user'
-                            ? 'bg-emerald-600 text-white'
+                            ? 'bg-foreground text-background'
                             : 'bg-muted text-muted-foreground'
                         }`}
                       >
                         {msg.role === 'user' ? (
-                          <User className="h-3.5 w-3.5" />
+                          <User className="h-3 w-3" />
                         ) : (
-                          <Bot className="h-3.5 w-3.5" />
+                          <Bot className="h-3 w-3" />
                         )}
                       </div>
                       <div
-                        className={`rounded-2xl px-4 py-2.5 text-sm ${
+                        className={`rounded-lg px-3 py-2 text-xs leading-relaxed ${
                           msg.role === 'user'
-                            ? 'bg-emerald-600 text-white rounded-br-md'
-                            : 'bg-muted rounded-bl-md'
+                            ? 'bg-foreground text-background rounded-br-sm'
+                            : 'bg-muted rounded-bl-sm'
                         }`}
                       >
                         {msg.content}
@@ -872,14 +834,14 @@ export function BuilderView() {
                 {chatLoading && (
                   <div className="flex justify-start">
                     <div className="flex gap-2 max-w-[80%]">
-                      <div className="h-7 w-7 rounded-full bg-muted flex items-center justify-center">
-                        <Bot className="h-3.5 w-3.5 text-muted-foreground" />
+                      <div className="h-6 w-6 rounded-full bg-muted flex items-center justify-center">
+                        <Bot className="h-3 w-3 text-muted-foreground" />
                       </div>
-                      <div className="bg-muted rounded-2xl rounded-bl-md px-4 py-2.5">
+                      <div className="bg-muted rounded-lg rounded-bl-sm px-3 py-2">
                         <div className="flex gap-1">
-                          <span className="h-2 w-2 rounded-full bg-muted-foreground/50 animate-bounce" style={{ animationDelay: '0ms' }} />
-                          <span className="h-2 w-2 rounded-full bg-muted-foreground/50 animate-bounce" style={{ animationDelay: '150ms' }} />
-                          <span className="h-2 w-2 rounded-full bg-muted-foreground/50 animate-bounce" style={{ animationDelay: '300ms' }} />
+                          <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40 animate-bounce" style={{ animationDelay: '0ms' }} />
+                          <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40 animate-bounce" style={{ animationDelay: '150ms' }} />
+                          <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40 animate-bounce" style={{ animationDelay: '300ms' }} />
                         </div>
                       </div>
                     </div>
@@ -891,7 +853,7 @@ export function BuilderView() {
           </ScrollArea>
 
           {/* Chat Input */}
-          <div className="border-t p-4 bg-background">
+          <div className="border-t p-3 bg-background">
             <div className="flex gap-2 max-w-2xl mx-auto">
               <Input
                 placeholder="Type a message to test your agent..."
@@ -899,15 +861,15 @@ export function BuilderView() {
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleChat()}
                 disabled={chatLoading}
-                className="flex-1"
+                className="flex-1 h-8 text-sm"
               />
               <Button
                 onClick={handleChat}
                 disabled={chatLoading || !chatInput.trim()}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                className="bg-foreground text-background hover:bg-foreground/90 h-8 w-8"
                 size="icon"
               >
-                <Send className="h-4 w-4" />
+                <Send className="h-3.5 w-3.5" />
               </Button>
             </div>
           </div>

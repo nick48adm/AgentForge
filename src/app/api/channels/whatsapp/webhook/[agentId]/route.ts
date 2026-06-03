@@ -12,7 +12,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ agen
   const channel = await db.channel.findUnique({ where: { agentId_type: { agentId, type: 'whatsapp' } } })
   if (!channel) return new NextResponse('Not found', { status: 404 })
 
-  const config = JSON.parse(channel.config || '{}')
+  const config = JSON.parse(String(channel.config || '{}'))
   if (mode === 'subscribe' && token === config.verifyToken) {
     return new NextResponse(challenge, { status: 200 })
   }
@@ -37,7 +37,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ age
     const channel = await db.channel.findUnique({ where: { agentId_type: { agentId, type: 'whatsapp' } } })
     if (!channel || !channel.isActive) return NextResponse.json({ success: true })
 
-    const config = JSON.parse(channel.config || '{}')
+    const config = JSON.parse(String(channel.config || '{}'))
 
     const { content } = await routeChannelMessage({ agentId, userId: fromPhone, text, channel: 'whatsapp' })
 

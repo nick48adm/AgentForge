@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Smartphone, ExternalLink, Check, Loader2, Unplug } from "lucide-react";
+import { Smartphone, Check, Loader2, Unplug } from "lucide-react";
 
 interface TelegramConnectDialogProps {
   agentId: string;
@@ -72,31 +72,31 @@ export function TelegramConnectDialog({
           <Button
             variant={isConnected ? "outline" : "default"}
             size="sm"
-            className={isConnected ? "text-emerald-600 border-emerald-200 dark:border-emerald-800" : "bg-emerald-600 hover:bg-emerald-700"}
+            className={isConnected ? "text-xs h-7" : "bg-foreground text-background hover:bg-foreground/90 text-xs h-7"}
           >
-            <Smartphone className="w-4 h-4 mr-1.5" />
+            <Smartphone className="w-3 h-3 mr-1" />
             {isConnected ? "Connected" : "Telegram"}
           </Button>
         )}
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Smartphone className="w-5 h-5 text-emerald-600" />
+          <DialogTitle className="flex items-center gap-2 text-sm">
+            <Smartphone className="w-4 h-4" />
             Telegram Integration
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-xs">
             Connect your agent to Telegram so users can chat with it via a bot.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           {/* Instructions */}
-          <div className="rounded-lg bg-muted p-3 text-sm space-y-2">
-            <p className="font-medium">How to get a bot token:</p>
-            <ol className="list-decimal list-inside space-y-1 text-muted-foreground text-xs">
+          <div className="rounded-md bg-muted p-3 text-xs space-y-2">
+            <p className="font-medium text-[11px]">How to get a bot token:</p>
+            <ol className="list-decimal list-inside space-y-0.5 text-muted-foreground text-[10px]">
               <li>Open Telegram and search for <strong>@BotFather</strong></li>
-              <li>Send <code className="bg-background px-1 rounded">/newbot</code></li>
+              <li>Send <code className="bg-background px-1 rounded text-[10px]">/newbot</code></li>
               <li>Choose a name and username for your bot</li>
               <li>Copy the bot token provided</li>
             </ol>
@@ -104,49 +104,50 @@ export function TelegramConnectDialog({
 
           {isConnected ? (
             <div className="space-y-3">
-              <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
-                <Check className="w-5 h-5" />
-                <span className="font-medium">Connected as @{botUsername}</span>
+              <div className="flex items-center gap-2 text-xs">
+                <Check className="w-4 h-4" />
+                <span className="font-medium text-[11px]">Connected as @{botUsername}</span>
               </div>
               <Button
                 variant="destructive"
                 size="sm"
                 onClick={handleDisconnect}
                 disabled={loading}
-                className="w-full"
+                className="w-full h-8 text-xs"
               >
                 {loading ? (
-                  <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                  <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
                 ) : (
-                  <Unplug className="w-4 h-4 mr-1.5" />
+                  <Unplug className="w-3 h-3 mr-1.5" />
                 )}
                 Disconnect Bot
               </Button>
             </div>
           ) : (
-            <div className="space-y-3">
-              <div className="space-y-2">
-                <Label htmlFor="botToken">Bot Token</Label>
+            <div className="space-y-2.5">
+              <div className="space-y-1.5">
+                <Label htmlFor="botToken" className="text-xs">Bot Token</Label>
                 <Input
                   id="botToken"
                   type="password"
                   placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
                   value={botToken}
                   onChange={(e) => setBotToken(e.target.value)}
+                  className="h-8 text-xs"
                 />
               </div>
               {error && (
-                <p className="text-sm text-destructive">{error}</p>
+                <p className="text-[10px] text-red-400">{error}</p>
               )}
               <Button
                 onClick={handleConnect}
                 disabled={loading || !botToken.trim()}
-                className="w-full bg-emerald-600 hover:bg-emerald-700"
+                className="w-full bg-foreground text-background hover:bg-foreground/90 h-8 text-xs"
               >
                 {loading ? (
-                  <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                  <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
                 ) : (
-                  <Smartphone className="w-4 h-4 mr-1.5" />
+                  <Smartphone className="w-3 h-3 mr-1.5" />
                 )}
                 Connect Bot
               </Button>

@@ -19,7 +19,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ age
     const channel = await db.channel.findUnique({ where: { agentId_type: { agentId, type: 'discord' } } })
     if (!channel || !channel.isActive) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-    const config = JSON.parse(channel.config || '{}')
+    const config = JSON.parse(String(channel.config || '{}'))
     const rawBody = await req.text()
     const signature = req.headers.get('x-signature-ed25519') || ''
     const timestamp = req.headers.get('x-signature-timestamp') || ''

@@ -48,7 +48,7 @@ export function ChatInput({ onSend, isLoading, onStop, placeholder }: ChatInputP
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder || "Type a message..."}
-          className="min-h-[40px] max-h-[120px] resize-none flex-1"
+          className="min-h-[36px] max-h-[120px] resize-none flex-1 text-xs"
           rows={1}
         />
         {isLoading ? (
@@ -56,18 +56,18 @@ export function ChatInput({ onSend, isLoading, onStop, placeholder }: ChatInputP
             size="icon"
             variant="destructive"
             onClick={onStop}
-            className="flex-shrink-0 h-10 w-10"
+            className="flex-shrink-0 h-9 w-9"
           >
-            <Square className="h-4 w-4" />
+            <Square className="h-3.5 w-3.5" />
           </Button>
         ) : (
           <Button
             size="icon"
             onClick={handleSubmit}
             disabled={!input.trim()}
-            className="flex-shrink-0 h-10 w-10 bg-emerald-600 hover:bg-emerald-700"
+            className="flex-shrink-0 h-9 w-9 bg-foreground text-background hover:bg-foreground/90"
           >
-            <SendHorizontal className="h-4 w-4" />
+            <SendHorizontal className="h-3.5 w-3.5" />
           </Button>
         )}
       </div>

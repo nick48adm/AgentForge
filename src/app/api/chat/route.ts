@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    const messages = Array.isArray(conversation.messages) ? conversation.messages : []
+    const messages: Array<Record<string, unknown>> = Array.isArray(conversation.messages) ? (conversation.messages as Array<Record<string, unknown>>) : []
     messages.push({ role: 'user', content: message, timestamp: new Date().toISOString() })
 
     let assistantContent: string
@@ -109,7 +109,7 @@ export async function POST(req: NextRequest) {
 
     // Cap stored messages at 200 to prevent unbounded growth
     const cappedMessages = messages.length > 200 ? messages.slice(-200) : messages
-    await db.conversation.update({ where: { id: conversation.id }, data: { messages: cappedMessages } })
+    await db.conversation.update({ where: { id: conversation.id }, data: { messages: cappedMessages as any } })
 
     const cost = calculateCost(agent.model, tokensIn, tokensOut)
     await db.usageLog.create({ data: { userId: auth.user.id, agentId, tokensIn, tokensOut, cost, model: agent.model } })
@@ -121,17 +121,15 @@ export async function POST(req: NextRequest) {
   }
 }
 
-interface MessageLike {
-  role: string
-  content: string
-}
 
-async function directLLM(agent: { systemPrompt: string; model: string; temperature: number }, messages: MessageLike[]): Promise<{ content: string; tokensIn: number; tokensOut: number }> {
+async function directLLM(agent: { systemPrompt: string; model: string; temperature: number }, messages: Array<Record<string, unknown>>): Promise<{ content: string; tokensIn: number; tokensOut: number }> {
   try {
     const llmMessages: LLMMessage[] = []
     if (agent.systemPrompt) llmMessages.push({ role: 'system', content: agent.systemPrompt })
     for (const m of messages.slice(-20)) {
-      if (m.role === 'user' || m.role === 'assistant') llmMessages.push({ role: m.role, content: m.content })
+      const role = String(m.role ?? '')
+      const content = String(m.content ?? '')
+      if (role === 'user' || role === 'assistant') llmMessages.push({ role, content })
     }
     const result = await chatCompletion(agent.model, llmMessages, agent.temperature)
     return {

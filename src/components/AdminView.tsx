@@ -94,8 +94,8 @@ export function AdminView() {
   if (user?.role !== 'admin') {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
-        <AlertCircle className="h-12 w-12 text-muted-foreground" />
-        <p className="text-muted-foreground">Admin access required</p>
+        <AlertCircle className="h-10 w-10 text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">Admin access required</p>
       </div>
     )
   }
@@ -103,133 +103,105 @@ export function AdminView() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-[60vh]">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
       </div>
     )
   }
 
-  const statusColors: Record<string, string> = {
-    draft: 'bg-slate-500/10 text-slate-500',
-    deploying: 'bg-amber-500/10 text-amber-500',
-    published: 'bg-emerald-500/10 text-emerald-500',
-    stopped: 'bg-red-500/10 text-red-500',
-    suspended: 'bg-red-500/10 text-red-500',
+  const statusStyles: Record<string, string> = {
+    draft: 'bg-muted text-muted-foreground',
+    deploying: 'bg-foreground/10 text-foreground',
+    published: 'bg-foreground text-background',
+    stopped: 'bg-red-500/10 text-red-400',
+    suspended: 'bg-red-500/10 text-red-400',
+  }
+
+  const planStyles: Record<string, string> = {
+    free: 'bg-muted text-muted-foreground',
+    pro: 'bg-foreground text-background',
+    enterprise: 'bg-foreground/70 text-background',
   }
 
   return (
-    <div className="container mx-auto px-4 md:px-6 py-8 max-w-6xl">
+    <div className="container mx-auto px-4 md:px-6 py-8 max-w-5xl">
       <div className="mb-8">
-        <h1 className="text-2xl md:text-3xl font-bold flex items-center gap-2">
-          <Shield className="h-7 w-7 text-emerald-500" />
-          Admin Dashboard
+        <h1 className="text-xl font-semibold tracking-tight flex items-center gap-2">
+          <Shield className="h-5 w-5" />
+          Admin
         </h1>
-        <p className="text-muted-foreground mt-1">Manage users, agents, and platform resources.</p>
+        <p className="text-sm text-muted-foreground mt-0.5">Manage users, agents, and platform resources.</p>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        <Card className="border-border/50">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <Users className="h-5 w-5 text-emerald-500" />
-              <div>
-                <div className="text-2xl font-bold">{users.length}</div>
-                <div className="text-xs text-muted-foreground">Total Users</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-border/50">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <Bot className="h-5 w-5 text-cyan-500" />
-              <div>
-                <div className="text-2xl font-bold">{agents.length}</div>
-                <div className="text-xs text-muted-foreground">Total Agents</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-border/50">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <BarChart3 className="h-5 w-5 text-amber-500" />
-              <div>
-                <div className="text-2xl font-bold">
-                  {agents.filter((a) => a.status === 'published').length}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
+        {[
+          { icon: Users, value: users.length, label: 'Users' },
+          { icon: Bot, value: agents.length, label: 'Agents' },
+          { icon: BarChart3, value: agents.filter((a) => a.status === 'published').length, label: 'Published' },
+          { icon: Shield, value: users.filter((u) => u.role === 'admin').length, label: 'Admins' },
+        ].map((stat, i) => (
+          <Card key={i} className="border-border/50">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-3">
+                <stat.icon className="h-4 w-4 text-muted-foreground" />
+                <div>
+                  <div className="text-lg font-semibold tracking-tight">{stat.value}</div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider">{stat.label}</div>
                 </div>
-                <div className="text-xs text-muted-foreground">Published</div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="border-border/50">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <Shield className="h-5 w-5 text-violet-500" />
-              <div>
-                <div className="text-2xl font-bold">
-                  {users.filter((u) => u.role === 'admin').length}
-                </div>
-                <div className="text-xs text-muted-foreground">Admins</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       {/* Tabs */}
       <Tabs defaultValue="users">
         <TabsList>
-          <TabsTrigger value="users">Users</TabsTrigger>
-          <TabsTrigger value="agents">Agents</TabsTrigger>
+          <TabsTrigger value="users" className="text-xs">Users</TabsTrigger>
+          <TabsTrigger value="agents" className="text-xs">Agents</TabsTrigger>
         </TabsList>
 
         <TabsContent value="users" className="mt-4">
           <Card>
-            <CardHeader>
-              <CardTitle>All Users</CardTitle>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">All Users</CardTitle>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Plan</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Agents</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead className="text-xs">Name</TableHead>
+                    <TableHead className="text-xs">Email</TableHead>
+                    <TableHead className="text-xs">Plan</TableHead>
+                    <TableHead className="text-xs">Role</TableHead>
+                    <TableHead className="text-xs">Agents</TableHead>
+                    <TableHead className="text-xs">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {users.map((u) => (
                     <TableRow key={u.id}>
-                      <TableCell className="font-medium">{u.name || '-'}</TableCell>
-                      <TableCell className="text-muted-foreground">{u.email || '-'}</TableCell>
+                      <TableCell className="font-medium text-xs">{u.name || '-'}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{u.email || '-'}</TableCell>
                       <TableCell>
-                        <Badge variant="secondary" className={
-                          u.plan === 'pro' ? 'bg-emerald-500/10 text-emerald-500' :
-                          u.plan === 'enterprise' ? 'bg-violet-500/10 text-violet-500' :
-                          'bg-muted'
-                        }>
+                        <Badge variant="secondary" className={`text-[10px] h-5 ${planStyles[u.plan] || 'bg-muted'}`}>
                           {u.plan}
                         </Badge>
                       </TableCell>
                       <TableCell>
                         <Badge variant="secondary" className={
-                          u.role === 'admin' ? 'bg-amber-500/10 text-amber-500' : 'bg-muted'
+                          u.role === 'admin' ? 'text-[10px] h-5 bg-foreground text-background' : 'text-[10px] h-5 bg-muted text-muted-foreground'
                         }>
                           {u.role}
                         </Badge>
                       </TableCell>
-                      <TableCell>{u._count.agents}</TableCell>
+                      <TableCell className="text-xs">{u._count.agents}</TableCell>
                       <TableCell>
                         <Select
                           value={u.plan}
                           onValueChange={(plan) => updateUserPlan(u.id, plan)}
                         >
-                          <SelectTrigger className="h-8 w-24">
+                          <SelectTrigger className="h-7 w-20 text-[10px]">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -249,39 +221,39 @@ export function AdminView() {
 
         <TabsContent value="agents" className="mt-4">
           <Card>
-            <CardHeader>
-              <CardTitle>All Agents</CardTitle>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">All Agents</CardTitle>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>Owner</TableHead>
-                    <TableHead>Model</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Conversations</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead className="text-xs">Name</TableHead>
+                    <TableHead className="text-xs">Owner</TableHead>
+                    <TableHead className="text-xs">Model</TableHead>
+                    <TableHead className="text-xs">Status</TableHead>
+                    <TableHead className="text-xs">Convos</TableHead>
+                    <TableHead className="text-xs">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {agents.map((a) => (
                     <TableRow key={a.id}>
-                      <TableCell className="font-medium">{a.name}</TableCell>
-                      <TableCell className="text-muted-foreground">{a.user.email || a.user.name}</TableCell>
-                      <TableCell>{a.model}</TableCell>
+                      <TableCell className="font-medium text-xs">{a.name}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{a.user.email || a.user.name}</TableCell>
+                      <TableCell className="text-xs font-mono">{a.model}</TableCell>
                       <TableCell>
-                        <Badge variant="secondary" className={statusColors[a.status] || 'bg-muted'}>
+                        <Badge variant="secondary" className={`text-[10px] h-5 ${statusStyles[a.status] || 'bg-muted'}`}>
                           {a.status}
                         </Badge>
                       </TableCell>
-                      <TableCell>{a._count.conversations}</TableCell>
+                      <TableCell className="text-xs">{a._count.conversations}</TableCell>
                       <TableCell>
                         <Select
                           value={a.status}
                           onValueChange={(status) => updateAgentStatus(a.id, status)}
                         >
-                          <SelectTrigger className="h-8 w-28">
+                          <SelectTrigger className="h-7 w-24 text-[10px]">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>

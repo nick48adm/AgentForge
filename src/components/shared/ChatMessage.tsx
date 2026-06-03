@@ -15,29 +15,29 @@ export function ChatMessage({ message }: { message: ChatMessageData }) {
   return (
     <div
       className={cn(
-        "flex gap-3 px-4 py-3",
+        "flex gap-2.5 px-4 py-2.5",
         isUser ? "justify-end" : "justify-start"
       )}
     >
       {!isUser && (
-        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
-          <Bot className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+        <div className="flex-shrink-0 w-7 h-7 rounded-full bg-muted flex items-center justify-center">
+          <Bot className="w-3.5 h-3.5 text-muted-foreground" />
         </div>
       )}
       <div
         className={cn(
-          "max-w-[75%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
+          "max-w-[75%] rounded-lg px-3.5 py-2 text-xs leading-relaxed",
           isUser
-            ? "bg-slate-800 dark:bg-slate-700 text-white rounded-br-md"
-            : "bg-muted border border-border rounded-bl-md"
+            ? "bg-foreground text-background rounded-br-sm"
+            : "bg-muted border border-border rounded-bl-sm"
         )}
       >
         <div className="whitespace-pre-wrap break-words">{message.content}</div>
         <div
           className={cn(
-            "text-[10px] mt-1.5",
+            "text-[9px] mt-1.5",
             isUser
-              ? "text-slate-400"
+              ? "text-background/50"
               : "text-muted-foreground"
           )}
         >
@@ -48,8 +48,8 @@ export function ChatMessage({ message }: { message: ChatMessageData }) {
         </div>
       </div>
       {isUser && (
-        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-600 flex items-center justify-center">
-          <User className="w-4 h-4 text-slate-600 dark:text-slate-300" />
+        <div className="flex-shrink-0 w-7 h-7 rounded-full bg-foreground/10 flex items-center justify-center">
+          <User className="w-3.5 h-3.5 text-foreground" />
         </div>
       )}
     </div>

@@ -19,7 +19,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ agen
 
   // Redact secrets before sending to client
   const sanitized = channels.map(ch => {
-    const cfg = JSON.parse(ch.config || '{}')
+    const cfg = JSON.parse(String(ch.config || '{}'))
     const { accessToken, botToken, ...safeCfg } = cfg
     return { ...ch, config: safeCfg }
   })
