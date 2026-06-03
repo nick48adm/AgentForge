@@ -21,34 +21,40 @@ export async function GET(req: NextRequest) {
       db.usageLog.aggregate({ _sum: { cost: true } }),
     ])
 
-    // Get live container list from Docker
-    let containers: any[] = []
+    // Get live container list from Docker with safe parsing
+    let containers: Array<Record<string, string>> = []
     try {
       const { stdout } = await execAsync(
         `docker ps --filter "name=af-agent-" --format '{"id":"{{.ID}}","name":"{{.Names}}","status":"{{.Status}}","image":"{{.Image}}","created":"{{.CreatedAt}}"}'`
       )
       containers = stdout.trim().split('\n').filter(Boolean).map(line => {
         try { return JSON.parse(line) } catch { return null }
-      }).filter(Boolean)
+      }).filter((c): c is Record<string, string> => c !== null)
     } catch {}
 
     // Get memory/cpu stats for running containers (non-blocking)
-    let containerStats: any[] = []
+    let containerStats: Array<Record<string, string>> = []
     if (containers.length > 0) {
       try {
-        const ids = containers.map((c: any) => c.id).join(' ')
-        const { stdout } = await execAsync(
-          `docker stats --no-stream --format '{"id":"{{.ID}}","cpu":"{{.CPUPerc}}","mem":"{{.MemUsage}}","memPerc":"{{.MemPerc}}"}' ${ids}`
-        )
-        containerStats = stdout.trim().split('\n').filter(Boolean).map(line => {
-          try { return JSON.parse(line) } catch { return null }
-        }).filter(Boolean)
+        // Safely extract container IDs (already from Docker output, but validate format)
+        const ids = containers
+          .map(c => c.id)
+          .filter(id => /^[a-f0-9]+$/.test(id))
+          .join(' ')
+        if (ids) {
+          const { stdout } = await execAsync(
+            `docker stats --no-stream --format '{"id":"{{.ID}}","cpu":"{{.CPUPerc}}","mem":"{{.MemUsage}}","memPerc":"{{.MemPerc}}"}' ${ids}`
+          )
+          containerStats = stdout.trim().split('\n').filter(Boolean).map(line => {
+            try { return JSON.parse(line) } catch { return null }
+          }).filter((s): s is Record<string, string> => s !== null)
+        }
       } catch {}
     }
 
     // Merge stats into containers
-    const enriched = containers.map((c: any) => {
-      const stats = containerStats.find((s: any) => s.id === c.id.slice(0, 12) || c.id.startsWith(s.id))
+    const enriched = containers.map((c) => {
+      const stats = containerStats.find(s => s.id === c.id.slice(0, 12) || c.id.startsWith(s.id))
       return { ...c, ...stats }
     })
 
@@ -60,7 +66,8 @@ export async function GET(req: NextRequest) {
       platform: { totalUsers, totalAgents, activeAgents, todayMessages, todayTokens, todayCost: todayCost.toFixed(4), totalRevenue: (totalRevenue._sum.cost || 0).toFixed(4) },
       containers: enriched,
     })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    console.error('[admin/stats]', error)
+    return NextResponse.json({ error: 'Failed to fetch admin stats' }, { status: 500 })
   }
 }

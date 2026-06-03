@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth } from '@/lib/session'
 import { reconfigureSandbox } from '@/lib/sandbox'
-
-const EDITABLE_FIELDS = ['name', 'description', 'systemPrompt', 'model', 'temperature', 'tools', 'avatar'] as const
+import { updateAgentSchema } from '@/lib/validations'
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requireAuth()
@@ -23,8 +22,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
     }
     return NextResponse.json(agent)
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    console.error('[agent GET]', error)
+    return NextResponse.json({ error: 'Failed to fetch agent' }, { status: 500 })
   }
 }
 
@@ -40,16 +40,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
 
     const body = await req.json()
-    const updateData: any = {}
+    const parsed = updateAgentSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues.map(i => i.message).join(', ') },
+        { status: 400 }
+      )
+    }
 
-    // Whitelist — status intentionally excluded (only deploy/stop routes change it)
-    if (body.name !== undefined) updateData.name = body.name.trim()
-    if (body.description !== undefined) updateData.description = body.description
-    if (body.systemPrompt !== undefined) updateData.systemPrompt = body.systemPrompt
-    if (body.model !== undefined) updateData.model = body.model
-    if (body.temperature !== undefined) updateData.temperature = Number(body.temperature)
-    if (body.tools !== undefined) updateData.tools = JSON.stringify(body.tools)
-    if (body.avatar !== undefined) updateData.avatar = body.avatar
+    const updateData: Record<string, unknown> = {}
+    const data = parsed.data
+    if (data.name !== undefined) updateData.name = data.name
+    if (data.description !== undefined) updateData.description = data.description
+    if (data.systemPrompt !== undefined) updateData.systemPrompt = data.systemPrompt
+    if (data.model !== undefined) updateData.model = data.model
+    if (data.temperature !== undefined) updateData.temperature = data.temperature
+    if (data.tools !== undefined) updateData.tools = data.tools
+    if (data.avatar !== undefined) updateData.avatar = data.avatar
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
@@ -59,21 +66,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     // Hot-reload running sandbox when config changes
     if (existing.status === 'published' && existing.sandboxUrl) {
-      const sandboxUpdate: any = {}
+      const sandboxUpdate: Record<string, unknown> = {}
       if (updateData.systemPrompt !== undefined) sandboxUpdate.systemPrompt = updateData.systemPrompt
       if (updateData.temperature !== undefined) sandboxUpdate.temperature = updateData.temperature
-      if (updateData.tools !== undefined) sandboxUpdate.tools = updateData.tools
+      if (updateData.tools !== undefined) sandboxUpdate.tools = JSON.stringify(updateData.tools)
       if (updateData.model !== undefined) sandboxUpdate.model = updateData.model
       if (Object.keys(sandboxUpdate).length > 0) {
-        reconfigureSandbox(existing.sandboxUrl, sandboxUpdate, (existing as any).sandboxSecret).catch(e =>
+        reconfigureSandbox(existing.sandboxUrl, sandboxUpdate, existing.sandboxSecret ?? undefined).catch(e =>
           console.error('[agent-patch] reconfigure failed:', e)
         )
       }
     }
 
     return NextResponse.json(agent)
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    console.error('[agent PATCH]', error)
+    return NextResponse.json({ error: 'Failed to update agent' }, { status: 500 })
   }
 }
 
@@ -96,7 +104,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
     await db.agent.delete({ where: { id } })
     return NextResponse.json({ success: true })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    console.error('[agent DELETE]', error)
+    return NextResponse.json({ error: 'Failed to delete agent' }, { status: 500 })
   }
 }

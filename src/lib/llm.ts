@@ -28,6 +28,19 @@ const OPENAI_PREFIXES = ['gpt-', 'o1', 'o3', 'o4']
 
 export type LLMProvider = 'groq' | 'nvidia-nim' | 'openai' | 'anthropic'
 
+export interface LLMMessage {
+  role: 'system' | 'user' | 'assistant' | 'tool'
+  content: string
+  tool_call_id?: string
+  tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }>
+}
+
+export interface LLMResult {
+  content: string
+  tokensIn: number
+  tokensOut: number
+}
+
 export function getProviderForModel(model: string): LLMProvider {
   // Explicit lists take priority
   if (NIM_MODELS.includes(model)) return 'nvidia-nim'
@@ -71,17 +84,29 @@ function getEndpointAndKey(provider: LLMProvider): { endpoint: string; apiKey: s
   }
 }
 
+const MAX_RETRIES = 2
+const RETRY_DELAY_MS = 1000
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+function isRetryable(status: number): boolean {
+  // Retry on rate limits and server errors
+  return status === 429 || status >= 500
+}
+
 async function anthropicChatCompletion(
   model: string,
-  messages: any[],
+  messages: LLMMessage[],
   temperature: number,
   apiKey: string
-): Promise<{ content: string; tokensIn: number; tokensOut: number }> {
+): Promise<LLMResult> {
   // Separate system message from conversation
   const systemMsg = messages.find(m => m.role === 'system')
   const conversationMsgs = messages.filter(m => m.role !== 'system')
 
-  const body: any = {
+  const body: Record<string, unknown> = {
     model,
     max_tokens: 4096,
     temperature,
@@ -89,37 +114,45 @@ async function anthropicChatCompletion(
   }
   if (systemMsg) body.system = systemMsg.content
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(55000),
-  })
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(55000),
+    })
 
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`Anthropic API error ${res.status}: ${body}`)
+    if (!res.ok) {
+      if (isRetryable(res.status) && attempt < MAX_RETRIES) {
+        await sleep(RETRY_DELAY_MS * (attempt + 1))
+        continue
+      }
+      const errBody = await res.text().catch(() => '')
+      throw new Error(`Anthropic API error ${res.status}: ${errBody}`)
+    }
+
+    const data = await res.json()
+    const text = data.content?.find((b: { type: string }) => b.type === 'text')?.text || ''
+
+    return {
+      content: text,
+      tokensIn: data.usage?.input_tokens || 0,
+      tokensOut: data.usage?.output_tokens || 0,
+    }
   }
 
-  const data = await res.json()
-  const text = data.content?.find((b: any) => b.type === 'text')?.text || ''
-
-  return {
-    content: text,
-    tokensIn: data.usage?.input_tokens || 0,
-    tokensOut: data.usage?.output_tokens || 0,
-  }
+  throw new Error('Anthropic API: max retries exceeded')
 }
 
 export async function chatCompletion(
   model: string,
-  messages: any[],
+  messages: LLMMessage[],
   temperature: number
-): Promise<{ content: string; tokensIn: number; tokensOut: number }> {
+): Promise<LLMResult> {
   const provider = getProviderForModel(model)
   const { endpoint, apiKey } = getEndpointAndKey(provider)
 
@@ -133,27 +166,35 @@ export async function chatCompletion(
   }
 
   // OpenAI-compatible API (Groq, NIM, OpenAI)
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({ model, messages, temperature }),
-    signal: AbortSignal.timeout(55000),
-  })
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({ model, messages, temperature }),
+      signal: AbortSignal.timeout(55000),
+    })
 
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`LLM API error (${provider}) ${res.status}: ${body}`)
+    if (!res.ok) {
+      if (isRetryable(res.status) && attempt < MAX_RETRIES) {
+        await sleep(RETRY_DELAY_MS * (attempt + 1))
+        continue
+      }
+      const errBody = await res.text().catch(() => '')
+      throw new Error(`LLM API error (${provider}) ${res.status}: ${errBody}`)
+    }
+
+    const data = await res.json()
+    const choice = data.choices?.[0]
+
+    return {
+      content: choice?.message?.content || '',
+      tokensIn: data.usage?.prompt_tokens || 0,
+      tokensOut: data.usage?.completion_tokens || 0,
+    }
   }
 
-  const data = await res.json()
-  const choice = data.choices?.[0]
-
-  return {
-    content: choice?.message?.content || '',
-    tokensIn: data.usage?.prompt_tokens || 0,
-    tokensOut: data.usage?.completion_tokens || 0,
-  }
+  throw new Error(`LLM API (${provider}): max retries exceeded`)
 }

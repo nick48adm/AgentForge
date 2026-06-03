@@ -80,29 +80,29 @@ export function DashboardView() {
 
   useEffect(() => {
     if (!user?.id) return
-    const uid = user.id
     const load = async () => {
       try {
         const [agentsRes, usageRes] = await Promise.all([
-          fetch('/api/agents', { headers: { 'x-user-id': uid } }),
-          fetch('/api/usage', { headers: { 'x-user-id': uid } }),
+          fetch('/api/agents'),
+          fetch('/api/usage'),
         ])
         if (agentsRes.ok) setAgents(await agentsRes.json())
         if (usageRes.ok) setUsage(await usageRes.json())
-      } catch {}
+      } catch (err) {
+        console.error('[dashboard] Failed to load data:', err)
+      }
       setLoading(false)
     }
     load()
   }, [user?.id])
 
   const fetchAgents = async () => {
-    if (!user?.id) return
     try {
-      const res = await fetch('/api/agents', {
-        headers: { 'x-user-id': user.id },
-      })
+      const res = await fetch('/api/agents')
       if (res.ok) setAgents(await res.json())
-    } catch {}
+    } catch (err) {
+      console.error('[dashboard] Failed to fetch agents:', err)
+    }
   }
 
   const handleCreateAgent = async () => {
@@ -111,10 +111,7 @@ export function DashboardView() {
     try {
       const res = await fetch('/api/agents', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': user?.id || '',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newAgentName }),
       })
       if (res.ok) {
@@ -124,32 +121,26 @@ export function DashboardView() {
         setSelectedAgentId(agent.id)
         setView('builder')
       }
-    } catch {}
+    } catch (err) {
+      console.error('[dashboard] Failed to create agent:', err)
+    }
     setCreating(false)
   }
 
   const handleDeleteAgent = async (id: string) => {
     try {
-      await fetch(`/api/agents/${id}`, {
-        method: 'DELETE',
-        headers: { 'x-user-id': user?.id || '' },
-      })
+      await fetch(`/api/agents/${id}`, { method: 'DELETE' })
       fetchAgents()
-    } catch {}
+    } catch (err) {
+      console.error('[dashboard] Failed to delete agent:', err)
+    }
   }
 
   const startDeployPoll = () => {
     if (deployPollRef.current) return
     deployPollRef.current = setInterval(async () => {
-      if (!user?.id) {
-        if (deployPollRef.current) {
-          clearInterval(deployPollRef.current)
-          deployPollRef.current = null
-        }
-        return
-      }
       try {
-        const res = await fetch('/api/agents', { headers: { 'x-user-id': user.id } })
+        const res = await fetch('/api/agents')
         if (res.ok) {
           const data: Agent[] = await res.json()
           setAgents(data)
@@ -159,31 +150,31 @@ export function DashboardView() {
             deployPollRef.current = null
           }
         }
-      } catch {}
+      } catch (err) {
+        console.error('[dashboard] Deploy poll error:', err)
+      }
     }, 2000)
   }
 
   const handleDeployAgent = async (id: string) => {
     try {
-      const res = await fetch(`/api/agents/${id}/deploy`, {
-        method: 'POST',
-        headers: { 'x-user-id': user?.id || '' },
-      })
+      const res = await fetch(`/api/agents/${id}/deploy`, { method: 'POST' })
       if (res.ok) {
         fetchAgents()
         startDeployPoll()
       }
-    } catch {}
+    } catch (err) {
+      console.error('[dashboard] Failed to deploy agent:', err)
+    }
   }
 
   const handleStopAgent = async (id: string) => {
     try {
-      await fetch(`/api/agents/${id}/stop`, {
-        method: 'POST',
-        headers: { 'x-user-id': user?.id || '' },
-      })
+      await fetch(`/api/agents/${id}/stop`, { method: 'POST' })
       fetchAgents()
-    } catch {}
+    } catch (err) {
+      console.error('[dashboard] Failed to stop agent:', err)
+    }
   }
 
   const statusColors: Record<string, string> = {
@@ -193,7 +184,7 @@ export function DashboardView() {
     stopped: 'bg-red-500/10 text-red-500',
   }
 
-  const statusIcons: Record<string, any> = {
+  const statusIcons: Record<string, typeof Pencil> = {
     draft: Pencil,
     deploying: Loader2,
     published: Play,

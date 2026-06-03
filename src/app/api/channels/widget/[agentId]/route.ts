@@ -18,23 +18,36 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ agen
   }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-  const agentName = agent.name.replace(/'/g, "\\'")
+
+  // Sanitize agent name for safe inclusion in JS string — escape all special chars
+  const agentName = agent.name
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/"/g, '\\"')
+    .replace(/</g, '\\x3c')
+    .replace(/>/g, '\\x3e')
+    .replace(/\//g, '\\/')
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+
+  // Sanitize agentId for safe inclusion in JS
+  const safeAgentId = agentId.replace(/[^a-zA-Z0-9-]/g, '')
 
   // Upsert widget channel record
   await db.channel.upsert({
     where: { agentId_type: { agentId, type: 'widget' } },
-    create: { agentId, type: 'widget', config: JSON.stringify({ agentName }), isActive: true },
+    create: { agentId, type: 'widget', config: { agentName: agent.name }, isActive: true },
     update: { isActive: true },
   }).catch(() => {})
 
   // Self-contained embeddable widget (no framework dependencies)
   const js = `
 (function() {
-  if (window.__agentforge_${agentId.replace(/-/g,'_')}) return;
-  window.__agentforge_${agentId.replace(/-/g,'_')} = true;
+  if (window.__agentforge_${safeAgentId.replace(/-/g,'_')}) return;
+  window.__agentforge_${safeAgentId.replace(/-/g,'_')} = true;
 
-  const APP_URL = '${appUrl}';
-  const AGENT_ID = '${agentId}';
+  const APP_URL = '${appUrl.replace(/'/g, "\\'")}';
+  const AGENT_ID = '${safeAgentId}';
   const AGENT_NAME = '${agentName}';
 
   const style = document.createElement('style');
@@ -102,7 +115,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ agen
     </div>
     <div id="af-widget-msgs"></div>
     <div id="af-widget-input-row">
-      <textarea id="af-widget-input" rows="1" placeholder="Type a message…"></textarea>
+      <textarea id="af-widget-input" rows="1" placeholder="Type a message\\u2026"></textarea>
       <button id="af-widget-send">Send</button>
     </div>
   \`;
@@ -114,12 +127,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ agen
   const input = document.getElementById('af-widget-input');
   const sendBtn = document.getElementById('af-widget-send');
   let conversationId = null;
-  let widgetUserId = 'widget-' + Math.random().toString(36).slice(2);
+  // Use crypto.randomUUID() for secure unique IDs when available, else Math.random fallback
+  let widgetUserId = 'widget-' + (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID().slice(0,8) : Math.random().toString(36).slice(2,10));
 
   function addMsg(role, text) {
     const el = document.createElement('div');
     el.className = 'af-msg ' + role;
-    el.textContent = text;
+    el.textContent = text; // textContent is safe — no XSS
     msgs.appendChild(el);
     msgs.scrollTop = msgs.scrollHeight;
     return el;
@@ -131,7 +145,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ agen
     input.value = '';
     sendBtn.disabled = true;
     addMsg('user', text);
-    const typing = addMsg('bot typing', '…');
+    const typing = addMsg('bot typing', '\\u2026');
 
     try {
       const res = await fetch(APP_URL + '/api/channels/widget/' + AGENT_ID + '/chat', {

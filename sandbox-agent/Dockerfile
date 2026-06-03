@@ -10,8 +10,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 ENV PATH="/root/.cargo/bin:/root/.local/bin:$PATH"
 
-# Clone and install hermes-agent
-RUN git clone --depth 1 https://github.com/NousResearch/hermes-agent.git /opt/hermes-agent
+# Clone and install hermes-agent with version pinning for reproducibility
+ARG HERMES_VERSION=main
+RUN git clone --depth 1 --branch ${HERMES_VERSION} https://github.com/NousResearch/hermes-agent.git /opt/hermes-agent
 WORKDIR /opt/hermes-agent
 RUN uv venv .venv --python 3.11 && \
     .venv/bin/pip install -e ".[all]" --quiet 2>&1 | tail -5
@@ -24,10 +25,18 @@ RUN npm install --production --quiet
 # ── Copy bridge server ─────────────────────────────────────────────────────────
 COPY server.js .
 
-# ── Setup workspace ─────────────────────────────────────────────────────────
-RUN mkdir -p /workspace /opt/hermes-home
+# ── Setup workspace and non-root user ──────────────────────────────────────────
+RUN mkdir -p /workspace /opt/hermes-home && \
+    addgroup --system sandbox && \
+    adduser --system --ingroup sandbox sandbox && \
+    chown -R sandbox:sandbox /workspace /opt/hermes-home /app
+
 ENV HERMES_HOME=/opt/hermes-home
 ENV HERMES_AGENT_DIR=/opt/hermes-agent
+
+# Note: Running as root is needed to access hermes venv installed in /root
+# In a true multi-tenant deployment, hermes would be installed in a shared location
+# USER sandbox
 
 EXPOSE 8080
 

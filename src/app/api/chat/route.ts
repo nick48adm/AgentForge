@@ -3,7 +3,30 @@ import { db } from '@/lib/db'
 import { requireAuth } from '@/lib/session'
 import { proxyChatToSandbox } from '@/lib/sandbox'
 import { chatLimit } from '@/lib/rate-limit'
-import { chatCompletion } from '@/lib/llm'
+import { chatCompletion, type LLMMessage, getProviderForModel } from '@/lib/llm'
+import { chatSchema } from '@/lib/validations'
+
+/**
+ * Model-specific cost multipliers (USD per 1K tokens).
+ * These are approximate and should be updated as providers change pricing.
+ */
+const MODEL_COSTS: Record<string, { inputPer1K: number; outputPer1K: number }> = {
+  'llama-3.3-70b-versatile': { inputPer1K: 0.00003, outputPer1K: 0.00006 },
+  'mixtral-8x7b-32768': { inputPer1K: 0.00003, outputPer1K: 0.00006 },
+  'gpt-4o': { inputPer1K: 0.0025, outputPer1K: 0.01 },
+  'gpt-4o-mini': { inputPer1K: 0.00015, outputPer1K: 0.0006 },
+  'o4-mini': { inputPer1K: 0.0015, outputPer1K: 0.006 },
+  'claude-sonnet-4-5': { inputPer1K: 0.003, outputPer1K: 0.015 },
+  'claude-opus-4-5': { inputPer1K: 0.015, outputPer1K: 0.075 },
+  'moonshotai/kimi-k2.6': { inputPer1K: 0.0006, outputPer1K: 0.002 },
+  'deepseek-ai/deepseek-v4-pro': { inputPer1K: 0.0006, outputPer1K: 0.002 },
+  'deepseek-ai/deepseek-v4-flash': { inputPer1K: 0.0001, outputPer1K: 0.0004 },
+}
+
+function calculateCost(model: string, tokensIn: number, tokensOut: number): number {
+  const costs = MODEL_COSTS[model] || MODEL_COSTS['llama-3.3-70b-versatile']!
+  return (tokensIn / 1000) * costs.inputPer1K + (tokensOut / 1000) * costs.outputPer1K
+}
 
 export async function POST(req: NextRequest) {
   const auth = await requireAuth()
@@ -19,11 +42,15 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { agentId, message, conversationId } = await req.json()
-
-    if (!agentId || !message?.trim()) {
-      return NextResponse.json({ error: 'agentId and message are required' }, { status: 400 })
+    const body = await req.json()
+    const parsed = chatSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues.map(i => i.message).join(', ') },
+        { status: 400 }
+      )
     }
+    const { agentId, message, conversationId } = parsed.data
 
     const agent = await db.agent.findUnique({ where: { id: agentId } })
     if (!agent) return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
@@ -39,11 +66,11 @@ export async function POST(req: NextRequest) {
 
     if (!conversation) {
       conversation = await db.conversation.create({
-        data: { agentId, userId: auth.user.id, title: message.slice(0, 50), messages: JSON.stringify([]) },
+        data: { agentId, userId: auth.user.id, title: message.slice(0, 50), messages: [] },
       })
     }
 
-    const messages = JSON.parse(conversation.messages || '[]')
+    const messages = Array.isArray(conversation.messages) ? conversation.messages : []
     messages.push({ role: 'user', content: message, timestamp: new Date().toISOString() })
 
     let assistantContent: string
@@ -57,45 +84,64 @@ export async function POST(req: NextRequest) {
           message,
           conversationHistory: messages.slice(-20),
           userId: auth.user.id,
-        }, (agent as any).sandboxSecret)
+        }, agent.sandboxSecret ?? undefined)
         assistantContent = result.content
         tokensIn = result.tokensIn
         tokensOut = result.tokensOut
-      } catch (e: any) {
-        console.error('[chat] sandbox error, falling back:', e.message)
-        assistantContent = await directLLM(agent, messages)
+      } catch (e: unknown) {
+        const errMsg = e instanceof Error ? e.message : 'Unknown error'
+        console.error('[chat] sandbox error, falling back:', errMsg)
+        const result = await directLLM(agent, messages)
+        assistantContent = result.content
+        tokensIn = result.tokensIn
+        tokensOut = result.tokensOut
       }
     } else {
       // Draft / preview
-      assistantContent = await directLLM(agent, messages)
+      const result = await directLLM(agent, messages)
+      assistantContent = result.content
+      tokensIn = result.tokensIn
+      tokensOut = result.tokensOut
     }
 
     const assistantMessage = { role: 'assistant', content: assistantContent, timestamp: new Date().toISOString() }
     messages.push(assistantMessage)
 
-    await db.conversation.update({ where: { id: conversation.id }, data: { messages: JSON.stringify(messages) } })
+    // Cap stored messages at 200 to prevent unbounded growth
+    const cappedMessages = messages.length > 200 ? messages.slice(-200) : messages
+    await db.conversation.update({ where: { id: conversation.id }, data: { messages: cappedMessages } })
 
-    const cost = tokensIn * 0.00003 + tokensOut * 0.00006
+    const cost = calculateCost(agent.model, tokensIn, tokensOut)
     await db.usageLog.create({ data: { userId: auth.user.id, agentId, tokensIn, tokensOut, cost, model: agent.model } })
 
     return NextResponse.json({ conversationId: conversation.id, message: assistantMessage, usage: { tokensIn, tokensOut } })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[chat]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to process chat message' }, { status: 500 })
   }
 }
 
-async function directLLM(agent: any, messages: any[]): Promise<string> {
+interface MessageLike {
+  role: string
+  content: string
+}
+
+async function directLLM(agent: { systemPrompt: string; model: string; temperature: number }, messages: MessageLike[]): Promise<{ content: string; tokensIn: number; tokensOut: number }> {
   try {
-    const llmMessages: any[] = []
+    const llmMessages: LLMMessage[] = []
     if (agent.systemPrompt) llmMessages.push({ role: 'system', content: agent.systemPrompt })
     for (const m of messages.slice(-20)) {
       if (m.role === 'user' || m.role === 'assistant') llmMessages.push({ role: m.role, content: m.content })
     }
     const result = await chatCompletion(agent.model, llmMessages, agent.temperature)
-    return result.content || 'Unable to generate a response.'
-  } catch (e: any) {
-    console.error('[chat] LLM error:', e)
-    return 'I encountered an error. Please try again.'
+    return {
+      content: result.content || 'Unable to generate a response.',
+      tokensIn: result.tokensIn,
+      tokensOut: result.tokensOut,
+    }
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Unknown error'
+    console.error('[chat] LLM error:', message)
+    return { content: 'I encountered an error. Please try again.', tokensIn: 0, tokensOut: 0 }
   }
 }

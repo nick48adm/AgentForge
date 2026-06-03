@@ -32,8 +32,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     runDeploy(agent, deployJob.id, newVersion)
 
     return NextResponse.json({ jobId: deployJob.id, status: 'queued', version: newVersion, message: 'Deployment started' })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    console.error('[deploy POST]', error)
+    return NextResponse.json({ error: 'Failed to start deployment' }, { status: 500 })
   }
 }
 
@@ -63,12 +64,24 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     return NextResponse.json({ ...job, logs: liveLogs })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    console.error('[deploy GET]', error)
+    return NextResponse.json({ error: 'Failed to fetch deploy status' }, { status: 500 })
   }
 }
 
-async function runDeploy(agent: any, jobId: string, version: number) {
+interface AgentWithTelegram {
+  id: string
+  name: string
+  systemPrompt: string
+  model: string
+  temperature: number
+  tools: unknown
+  version: number
+  telegramConnection?: { botToken: string } | null
+}
+
+async function runDeploy(agent: AgentWithTelegram, jobId: string, version: number) {
   const agentId = agent.id
   const appendLog = async (status: string, logs: string) => {
     await db.deployJob.update({ where: { id: jobId }, data: { status, logs } }).catch(console.error)
@@ -84,7 +97,7 @@ async function runDeploy(agent: any, jobId: string, version: number) {
       systemPrompt: agent.systemPrompt,
       model: agent.model,
       temperature: agent.temperature,
-      tools: agent.tools,
+      tools: typeof agent.tools === 'string' ? agent.tools : JSON.stringify(agent.tools),
     })
 
     await appendLog('deploying', 'Container started. Running health checks…\n')
@@ -128,9 +141,10 @@ async function runDeploy(agent: any, jobId: string, version: number) {
         console.error('[deploy] Telegram webhook error:', e)
       }
     }
-  } catch (err: any) {
-    console.error('[deploy]', err)
-    await db.deployJob.update({ where: { id: jobId }, data: { status: 'failed', logs: `Deployment error: ${err.message}` } }).catch(() => {})
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Unknown deployment error'
+    console.error('[deploy]', message)
+    await db.deployJob.update({ where: { id: jobId }, data: { status: 'failed', logs: `Deployment error: ${message}` } }).catch(() => {})
     await db.agent.update({ where: { id: agentId }, data: { status: 'draft' } }).catch(() => {})
   }
 }

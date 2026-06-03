@@ -54,11 +54,10 @@ export function AdminView() {
     if (user?.role !== 'admin') return
 
     const fetchData = async () => {
-      const headers = { 'x-user-id': user.id }
       try {
         const [usersRes, agentsRes] = await Promise.all([
-          fetch('/api/admin/users', { headers }),
-          fetch('/api/admin/agents', { headers }),
+          fetch('/api/admin/users'),
+          fetch('/api/admin/agents'),
         ])
         if (usersRes.ok) setUsers(await usersRes.json())
         if (agentsRes.ok) setAgents(await agentsRes.json())
@@ -73,7 +72,7 @@ export function AdminView() {
     try {
       await fetch(`/api/admin/users/${userId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'x-user-id': user.id },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plan }),
       })
       setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, plan } : u)))
@@ -85,7 +84,7 @@ export function AdminView() {
     try {
       await fetch(`/api/admin/agents/${agentId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'x-user-id': user.id },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
       })
       setAgents((prev) => prev.map((a) => (a.id === agentId ? { ...a, status } : a)))

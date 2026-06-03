@@ -86,16 +86,26 @@ export function LandingView() {
   const handleDemoLogin = async () => {
     setLoading(true)
     try {
+      // Demo account uses environment-configured credentials
+      const demoEmail = process.env.NEXT_PUBLIC_DEMO_EMAIL || ''
+      const demoPassword = process.env.NEXT_PUBLIC_DEMO_PASSWORD || ''
+      
+      if (!demoEmail || !demoPassword) {
+        setError('Demo mode is not configured. Please create an account instead.')
+        setLoading(false)
+        return
+      }
+
       // Create demo user if not exists (409 is fine — already registered)
       await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: 'demo@agentforge.io', password: 'demo123456', name: 'Demo User' }),
+        body: JSON.stringify({ email: demoEmail, password: demoPassword, name: 'Demo User' }),
       })
 
       const result = await signIn('credentials', {
-        email: 'demo@agentforge.io',
-        password: 'demo123456',
+        email: demoEmail,
+        password: demoPassword,
         redirect: false,
       })
 
@@ -114,7 +124,9 @@ export function LandingView() {
         setIsAuthenticated(true)
         setView('dashboard')
       }
-    } catch {}
+    } catch {
+      setError('Demo login failed. Please try again.')
+    }
     setLoading(false)
   }
 

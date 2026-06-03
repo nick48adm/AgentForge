@@ -1,23 +1,21 @@
+# AgentForge Caddyfile
+# Production reverse proxy configuration
+
 :81 {
-	@transform_port_query {
-		query XTransformPort=*
-	}
+        # Security headers
+        header {
+                X-Content-Type-Options "nosniff"
+                X-Frame-Options "DENY"
+                X-XSS-Protection "1; mode=block"
+                Referrer-Policy "strict-origin-when-cross-origin"
+                Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+        }
 
-	handle @transform_port_query {
-		reverse_proxy localhost:{query.XTransformPort} {
-			header_up Host {host}
-			header_up X-Forwarded-For {remote_host}
-			header_up X-Forwarded-Proto {scheme}
-			header_up X-Real-IP {remote_host}
-		}
-	}
-
-	handle {
-		reverse_proxy localhost:3000 {
-			header_up Host {host}
-			header_up X-Forwarded-For {remote_host}
-			header_up X-Forwarded-Proto {scheme}
-			header_up X-Real-IP {remote_host}
-		}
-	}
+        # Reverse proxy to Next.js app
+        reverse_proxy localhost:3000 {
+                header_up Host {host}
+                header_up X-Forwarded-For {remote_host}
+                header_up X-Forwarded-Proto {scheme}
+                header_up X-Real-IP {remote_host}
+        }
 }

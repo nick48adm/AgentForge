@@ -28,6 +28,9 @@ const HERMES_BIN   = path.join(HERMES_DIR, '.venv/bin/python')
 const HERMES_CLI   = path.join(HERMES_DIR, 'cli.py')
 const SANDBOX_SECRET = process.env.SANDBOX_SECRET || ''
 
+// Maximum number of concurrent hermes processes to prevent memory exhaustion
+const MAX_HERMES_PROCESSES = parseInt(process.env.MAX_HERMES_PROCESSES || '10', 10)
+
 // Mutable config — hot-reloadable via PATCH /_admin/reconfigure
 let config = {
   name:         process.env.AGENT_NAME || 'Agent',
@@ -76,7 +79,7 @@ providers:
     api_key: "${process.env.NVIDIA_NIM_API_KEY || ''}"
 
 tools:
-  enabled: [${config.tools.map(t => `"${t}"`).join(', ')}]
+  enabled: [${Array.isArray(config.tools) ? config.tools.map(t => `"${t}"`).join(', ') : ''}]
   web_search:
     serpapi_key: "${process.env.SERPAPI_KEY || ''}"
     brave_key: "${process.env.BRAVE_SEARCH_KEY || ''}"
@@ -114,8 +117,6 @@ function getHermesEnv() {
 
 /**
  * Spawn a hermes-agent process in batch/pipe mode for a user session.
- * We use hermes's --non-interactive mode (or run_agent.py if available)
- * which reads from stdin and writes to stdout.
  */
 function spawnHermesProcess(userId) {
   const session = { buffer: '', pendingResolve: null, pendingReject: null, ready: false }
@@ -199,6 +200,16 @@ async function chatWithHermesProcess(userId, message, conversationHistory) {
     throw new Error('Hermes binary not found')
   }
 
+  // Enforce max process limit
+  if (hermesProcesses.size >= MAX_HERMES_PROCESSES) {
+    // Kill the oldest process to make room
+    const oldestKey = hermesProcesses.keys().next().value
+    const oldest = hermesProcesses.get(oldestKey)
+    if (oldest?.proc) oldest.proc.kill()
+    hermesProcesses.delete(oldestKey)
+    console.log(`[hermes] Killed oldest process ${oldestKey} to stay under limit`)
+  }
+
   let entry = hermesProcesses.get(userId)
   if (!entry || entry.proc.exitCode !== null) {
     const { proc, session } = spawnHermesProcess(userId)
@@ -233,7 +244,6 @@ async function chatWithHermesProcess(userId, message, conversationHistory) {
 }
 
 // ── Direct LLM fallback (used when hermes process unavailable) ─────────────────
-// Also used for providers / models that hermes doesn't support yet
 const NIM_MODELS = ['moonshotai/kimi-k2.6', 'z-ai/glm-5.1', 'deepseek-ai/deepseek-v4-pro', 'deepseek-ai/deepseek-v4-flash']
 
 function getLLMEndpoint() {
@@ -247,7 +257,6 @@ function getLLMEndpoint() {
   if (m.startsWith('gpt-') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('o4')) {
     return { endpoint: 'https://api.openai.com/v1/chat/completions', apiKey: process.env.OPENAI_API_KEY || '', provider: 'openai' }
   }
-  // Groq-compatible models (llama, mixtral, gemma, etc.)
   return { endpoint: 'https://api.groq.com/openai/v1/chat/completions', apiKey: process.env.GROQ_API_KEY || '', provider: 'groq' }
 }
 
@@ -313,6 +322,23 @@ const TOOL_DEFINITIONS = [
   },
 ]
 
+/**
+ * Secure path resolution — prevents path traversal attacks.
+ * Only allows access to files within the WORKSPACE directory.
+ */
+function resolveSafePath(inputPath) {
+  // Normalize the path to handle various traversal techniques
+  const normalized = path.normalize(inputPath)
+  // Remove any remaining ../ patterns and null bytes
+  const cleaned = normalized.replace(/\0/g, '').replace(/\.\./g, '')
+  const safePath = path.join(WORKSPACE, cleaned)
+  // Verify the resolved path is within WORKSPACE
+  if (!safePath.startsWith(WORKSPACE + path.sep) && safePath !== WORKSPACE) {
+    return null // Path traversal detected
+  }
+  return safePath
+}
+
 async function executeTool(name, args) {
   switch (name) {
     case 'web_search': {
@@ -350,24 +376,33 @@ async function executeTool(name, args) {
     }
 
     case 'read_file': {
-      const safePath = path.join(WORKSPACE, args.path.replace(/\.\.\//g, ''))
-      if (!safePath.startsWith(WORKSPACE)) return { error: 'Access denied: path outside workspace' }
+      const safePath = resolveSafePath(args.path || '')
+      if (!safePath) return { error: 'Access denied: path outside workspace' }
       try { return { content: readFileSync(safePath, 'utf8').slice(0, 50000) } }
       catch (e) { return { error: e.message } }
     }
 
     case 'write_file': {
-      const safePath = path.join(WORKSPACE, args.path.replace(/\.\.\//g, ''))
-      if (!safePath.startsWith(WORKSPACE)) return { error: 'Access denied: path outside workspace' }
-      try { writeFileSync(safePath, args.content, 'utf8'); return { success: true, path: args.path } }
-      catch (e) { return { error: e.message } }
+      const safePath = resolveSafePath(args.path || '')
+      if (!safePath) return { error: 'Access denied: path outside workspace' }
+      try {
+        const content = typeof args.content === 'string' ? args.content : ''
+        writeFileSync(safePath, content, 'utf8')
+        return { success: true, path: args.path }
+      } catch (e) { return { error: e.message } }
     }
 
     case 'http_request': {
-      const url = new URL(args.url)
-      const blocked = ['localhost', '127.0.0.1', '0.0.0.0', '::1', '169.254', '10.', '192.168.', '172.']
-      if (blocked.some(b => url.hostname.startsWith(b))) return { error: 'Access to private addresses is not allowed' }
       try {
+        const url = new URL(args.url)
+        // Block private/reserved IP ranges (SSRF prevention)
+        const blockedHosts = ['localhost', '127.0.0.1', '0.0.0.0', '::1']
+        const blockedRanges = ['169.254.', '10.', '192.168.', '172.16.', '172.17.', '172.18.', '172.19.', '172.2', '172.3']
+        if (blockedHosts.includes(url.hostname)) return { error: 'Access to private addresses is not allowed' }
+        if (blockedRanges.some(r => url.hostname.startsWith(r))) return { error: 'Access to private addresses is not allowed' }
+        // Block non-http(s) protocols
+        if (!['http:', 'https:'].includes(url.protocol)) return { error: 'Only HTTP/HTTPS requests are allowed' }
+
         const res = await fetch(args.url, {
           method: args.method || 'GET',
           headers: { 'Content-Type': 'application/json', 'User-Agent': 'AgentForge/1.0' },
@@ -463,7 +498,14 @@ async function directLLMChat(message, conversationHistory) {
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let data = ''
-    req.on('data', c => { data += c; if (data.length > 1e6) req.destroy(new Error('Body too large')) })
+    req.on('data', c => {
+      data += c
+      // Limit request body size to 1MB
+      if (data.length > 1e6) {
+        req.destroy()
+        reject(new Error('Request body too large'))
+      }
+    })
     req.on('end', () => { try { resolve(JSON.parse(data || '{}')) } catch { reject(new Error('Invalid JSON')) } })
     req.on('error', reject)
   })
@@ -475,7 +517,10 @@ function send(res, status, body) {
 }
 function authOk(req) {
   if (!SANDBOX_SECRET) return true
-  return (req.headers.authorization || '') === `Bearer ${SANDBOX_SECRET}`
+  // Constant-time comparison for the secret token
+  const token = (req.headers.authorization || '').replace('Bearer ', '')
+  if (token.length !== SANDBOX_SECRET.length) return false
+  return Buffer.compare(Buffer.from(token), Buffer.from(SANDBOX_SECRET)) === 0
 }
 
 // ── HTTP server ────────────────────────────────────────────────────────────────
@@ -512,11 +557,14 @@ const server = http.createServer(async (req, res) => {
     try {
       const { message, conversationHistory = [], userId = 'anon' } = await readBody(req)
       if (!message) return send(res, 400, { error: 'message is required' })
+      if (typeof message !== 'string' || message.length > 10000) {
+        return send(res, 400, { error: 'message must be a string under 10000 characters' })
+      }
       const result = await chatWithHermes(userId, message, conversationHistory)
       return send(res, 200, result)
     } catch (e) {
       console.error('[chat error]', e)
-      return send(res, 500, { error: e.message })
+      return send(res, 500, { error: 'Internal server error' })
     }
   }
 
@@ -527,6 +575,7 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log(`[sandbox-agent] ${config.name} (${AGENT_ID}) ready on :${PORT}`)
   console.log(`[sandbox-agent] Model: ${config.model} | Tools: ${Array.isArray(config.tools) ? config.tools.join(', ') || 'none' : 'none'}`)
   console.log(`[sandbox-agent] Hermes home: ${HERMES_HOME}`)
+  console.log(`[sandbox-agent] Max hermes processes: ${MAX_HERMES_PROCESSES}`)
 })
 
 process.on('SIGTERM', () => {

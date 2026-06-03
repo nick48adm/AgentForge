@@ -146,7 +146,7 @@ export function BuilderView() {
     if (!selectedAgentId || !user?.id) return
     try {
       const res = await fetch(`/api/agents/${selectedAgentId}`, {
-        headers: { 'x-user-id': user.id },
+        
       })
       if (res.ok) {
         const data = await res.json()
@@ -173,7 +173,7 @@ export function BuilderView() {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-id': user.id,
+          
         },
         body: JSON.stringify({
           name,
@@ -267,7 +267,7 @@ export function BuilderView() {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-id': user.id,
+          
         },
         body: JSON.stringify({ name, description, systemPrompt, model, temperature, tools }),
       })
@@ -280,7 +280,7 @@ export function BuilderView() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-id': user.id,
+          
         },
         body: JSON.stringify({
           agentId: selectedAgentId,
@@ -326,7 +326,7 @@ export function BuilderView() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-id': user.id,
+          
         },
         body: JSON.stringify({ agentId: selectedAgentId, botToken: telegramToken }),
       })
@@ -351,7 +351,7 @@ export function BuilderView() {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-id': user.id,
+          
         },
         body: JSON.stringify({ agentId: selectedAgentId }),
       })
@@ -367,7 +367,7 @@ export function BuilderView() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'x-user-id': user.id,
+          
         },
         body: JSON.stringify({
           agentId: selectedAgentId,
@@ -388,7 +388,7 @@ export function BuilderView() {
     try {
       await fetch(`/api/knowledge/${id}`, {
         method: 'DELETE',
-        headers: { 'x-user-id': user.id },
+        
       })
       fetchAgent()
     } catch {}

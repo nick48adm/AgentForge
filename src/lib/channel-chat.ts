@@ -6,7 +6,8 @@
 
 import { db } from './db'
 import { proxyChatToSandbox } from './sandbox'
-import { chatCompletion } from './llm'
+import { chatCompletion, type LLMMessage } from './llm'
+import type { Agent } from '@prisma/client'
 
 export interface ChannelMessage {
   agentId: string
@@ -20,6 +21,32 @@ export interface ChannelResponse {
   content: string
   tokensIn: number
   tokensOut: number
+}
+
+/**
+ * Model-specific cost multipliers (USD per 1K tokens).
+ * These are approximate and should be updated as providers change pricing.
+ */
+const MODEL_COSTS: Record<string, { inputPer1K: number; outputPer1K: number }> = {
+  // Groq models (free tier)
+  'llama-3.3-70b-versatile': { inputPer1K: 0.00003, outputPer1K: 0.00006 },
+  'mixtral-8x7b-32768': { inputPer1K: 0.00003, outputPer1K: 0.00006 },
+  // OpenAI models
+  'gpt-4o': { inputPer1K: 0.0025, outputPer1K: 0.01 },
+  'gpt-4o-mini': { inputPer1K: 0.00015, outputPer1K: 0.0006 },
+  'o4-mini': { inputPer1K: 0.0015, outputPer1K: 0.006 },
+  // Anthropic models
+  'claude-sonnet-4-5': { inputPer1K: 0.003, outputPer1K: 0.015 },
+  'claude-opus-4-5': { inputPer1K: 0.015, outputPer1K: 0.075 },
+  // NVIDIA NIM models
+  'moonshotai/kimi-k2.6': { inputPer1K: 0.0006, outputPer1K: 0.002 },
+  'deepseek-ai/deepseek-v4-pro': { inputPer1K: 0.0006, outputPer1K: 0.002 },
+  'deepseek-ai/deepseek-v4-flash': { inputPer1K: 0.0001, outputPer1K: 0.0004 },
+}
+
+function calculateCost(model: string, tokensIn: number, tokensOut: number): number {
+  const costs = MODEL_COSTS[model] || MODEL_COSTS['llama-3.3-70b-versatile']!
+  return (tokensIn / 1000) * costs.inputPer1K + (tokensOut / 1000) * costs.outputPer1K
 }
 
 export async function routeChannelMessage(msg: ChannelMessage): Promise<ChannelResponse> {
@@ -36,36 +63,48 @@ export async function routeChannelMessage(msg: ChannelMessage): Promise<ChannelR
         message: msg.text,
         conversationHistory: [],
         userId: msg.userId,
-      })
+      }, agent.sandboxSecret ?? undefined)
       content = result.content
       tokensIn = result.tokensIn
       tokensOut = result.tokensOut
-    } catch (e: any) {
-      console.error(`[${msg.channel}] sandbox error:`, e.message)
-      content = await directLLM(agent, msg.text)
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'Unknown error'
+      console.error(`[${msg.channel}] sandbox error:`, message)
+      const result = await directLLM(agent, msg.text)
+      content = result.content
+      tokensIn = result.tokensIn
+      tokensOut = result.tokensOut
     }
   } else {
-    content = await directLLM(agent, msg.text)
+    const result = await directLLM(agent, msg.text)
+    content = result.content
+    tokensIn = result.tokensIn
+    tokensOut = result.tokensOut
   }
 
-  // Log usage with channel tag
-  const cost = tokensIn * 0.00003 + tokensOut * 0.00006
+  // Log usage with channel tag and model-specific cost
+  const cost = calculateCost(agent.model, tokensIn, tokensOut)
   await db.usageLog.create({
     data: { userId: agent.userId, agentId: msg.agentId, tokensIn, tokensOut, cost, model: agent.model, channel: msg.channel },
-  }).catch(console.error)
+  }).catch(err => console.error('[channel-chat] Failed to log usage:', err))
 
   return { content, tokensIn, tokensOut }
 }
 
-async function directLLM(agent: any, text: string): Promise<string> {
+async function directLLM(agent: Agent, text: string): Promise<{ content: string; tokensIn: number; tokensOut: number }> {
   try {
-    const messages: any[] = []
+    const messages: LLMMessage[] = []
     if (agent.systemPrompt) messages.push({ role: 'system', content: agent.systemPrompt })
     messages.push({ role: 'user', content: text })
     const result = await chatCompletion(agent.model, messages, agent.temperature)
-    return result.content || 'Sorry, I could not generate a response.'
-  } catch (e: any) {
-    console.error('[directLLM]', e.message)
-    return 'I encountered an error. Please try again.'
+    return {
+      content: result.content || 'Sorry, I could not generate a response.',
+      tokensIn: result.tokensIn,
+      tokensOut: result.tokensOut,
+    }
+  } catch (e: unknown) {
+    const message = e instanceof Error ? e.message : 'Unknown error'
+    console.error('[directLLM]', message)
+    return { content: 'I encountered an error. Please try again.', tokensIn: 0, tokensOut: 0 }
   }
 }
