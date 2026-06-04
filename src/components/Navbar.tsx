@@ -32,7 +32,7 @@ export function Navbar() {
   }
 
   return (
-    <header className="sticky top-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-xl">
+    <header className="sticky top-0 z-50 border-b border-border/50 bg-background/95">
       <div className="flex h-13 items-center px-4 md:px-6">
         {/* Logo */}
         <button

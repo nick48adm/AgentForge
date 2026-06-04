@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react'
 import { signIn } from 'next-auth/react'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
@@ -22,60 +22,38 @@ import {
   Layers,
 } from 'lucide-react'
 
-/* ─── Parallax hook ─── */
-function useParallax() {
-  const [scrollY, setScrollY] = useState(0)
-  useEffect(() => {
-    let ticking = false
-    const onScroll = () => {
-      if (!ticking) {
-        window.requestAnimationFrame(() => {
-          setScrollY(window.scrollY)
-          ticking = false
-        })
-        ticking = true
-      }
-    }
-    window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
-  }, [])
-  return scrollY
-}
-
-/* ─── Intersection Observer hook for scroll-triggered animations ─── */
-function useReveal() {
+/* ─── Intersection Observer hook — reusable, stable ─── */
+function useReveal(threshold = 0.1) {
   const ref = useRef<HTMLDivElement>(null)
   const [isVisible, setIsVisible] = useState(false)
   useEffect(() => {
     const el = ref.current
     if (!el) return
     const obs = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) setIsVisible(true) },
-      { threshold: 0.15, rootMargin: '0px 0px -60px 0px' }
+      ([entry]) => { if (entry.isIntersecting) { setIsVisible(true); obs.disconnect() } },
+      { threshold, rootMargin: '0px 0px -40px 0px' }
     )
     obs.observe(el)
     return () => obs.disconnect()
-  }, [])
+  }, [threshold])
   return { ref, isVisible }
 }
 
-/* ─── Floating orb component ─── */
-function FloatingOrb({ className, style }: { className?: string; style?: React.CSSProperties }) {
+/* ─── Floating orb — memoized, CSS transform only ─── */
+const FloatingOrb = memo(function FloatingOrb({ className, style, orbRef }: { className?: string; style?: React.CSSProperties; orbRef?: (el: HTMLDivElement | null) => void }) {
   return (
     <div
-      className={`absolute rounded-full pointer-events-none ${className ?? ''}`}
-      style={{
-        filter: 'blur(80px)',
-        ...style,
-      }}
+      ref={orbRef}
+      className={`absolute rounded-full pointer-events-none parallax-orb ${className ?? ''}`}
+      style={style}
     />
   )
-}
+})
 
-/* ─── Animated terminal ─── */
-function AnimatedTerminal() {
+/* ─── Animated terminal — memoized, self-contained ─── */
+const AnimatedTerminal = memo(function AnimatedTerminal() {
   const [lines, setLines] = useState<string[]>([])
-  const allLines = [
+  const allLines = useMemo(() => [
     '$ agentforge init my-support-bot',
     '✓ Agent scaffold created',
     '$ agentforge config --model gpt-4o --temp 0.7',
@@ -87,7 +65,7 @@ function AnimatedTerminal() {
     '✓ Agent live at agent-f8k2.agentforge.run',
     '$ agentforge connect telegram --token ***',
     '✓ Webhook registered. Bot is online.',
-  ]
+  ], [])
 
   useEffect(() => {
     let i = 0
@@ -100,11 +78,10 @@ function AnimatedTerminal() {
       }
     }, 600)
     return () => clearInterval(interval)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [allLines])
 
   return (
-    <div className="landing-terminal rounded-xl border border-white/[0.06] bg-[#0a0a0f]/80 backdrop-blur-xl p-5 font-mono text-[13px] leading-relaxed overflow-hidden shadow-2xl shadow-black/40">
+    <div className="landing-terminal rounded-xl border border-white/[0.06] bg-[#0a0a0f]/80 p-5 font-mono text-[13px] leading-relaxed overflow-hidden shadow-2xl shadow-black/40">
       <div className="flex items-center gap-2 mb-4 pb-3 border-b border-white/[0.06]">
         <div className="h-3 w-3 rounded-full bg-red-500/70" />
         <div className="h-3 w-3 rounded-full bg-yellow-500/70" />
@@ -116,7 +93,6 @@ function AnimatedTerminal() {
           <div
             key={i}
             className="terminal-line-enter"
-            style={{ animationDelay: `${i * 0.05}s` }}
           >
             {line.startsWith('$') ? (
               <span className="text-emerald-400">{line}</span>
@@ -135,7 +111,24 @@ function AnimatedTerminal() {
       </div>
     </div>
   )
-}
+})
+
+/* ─── Architecture layer data — stable reference ─── */
+const ARCHITECTURE_LAYERS = [
+  { icon: MessageSquare, title: 'Builder UI', description: 'ChatGPT-like interface to configure your agent — name, personality, knowledge base, tools, and model settings.', accent: 'from-indigo-500/20 to-transparent' },
+  { icon: Cpu, title: 'API Gateway + Registry', description: 'Handles auth, rate limiting, and routing. Agent Registry stores configs, versions, and ownership data.', accent: 'from-cyan-500/20 to-transparent' },
+  { icon: Box, title: 'Sandboxed Runtime', description: 'Each agent runs in its own isolated container — no shared memory, no cross-user access.', accent: 'from-emerald-500/20 to-transparent' },
+  { icon: Lock, title: 'Shared Infrastructure', description: 'Postgres with row-level security, object storage per user, vector DB namespaced per tenant, job queues.', accent: 'from-violet-500/20 to-transparent' },
+  { icon: Shield, title: 'Platform Services', description: 'Auth with OAuth, usage metering, per-container monitoring, and comprehensive admin dashboard.', accent: 'from-amber-500/20 to-transparent' },
+  { icon: Terminal, title: 'Deploy Anywhere', description: 'Docker Compose on a VPS for starters. Migrate to ECS/EKS when scaling. Same isolation guarantees everywhere.', accent: 'from-rose-500/20 to-transparent' },
+]
+
+const TELEGRAM_STEPS = [
+  'Create a bot via @BotFather in Telegram',
+  'Paste the bot token in your agent settings',
+  'Hit Publish — webhook is set up automatically',
+  'Your agent responds on Telegram in real-time',
+]
 
 /* ─── Main Landing View ─── */
 export function LandingView() {
@@ -146,13 +139,41 @@ export function LandingView() {
   const [name, setName] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const scrollY = useParallax()
 
-  const arch = useReveal()
-  const telegram = useReveal()
-  const cta = useReveal()
+  /* Parallax via ref — no state, no re-renders */
+  const scrollRef = useRef(0)
+  const orbsRef = useRef<HTMLDivElement[]>([])
+  const gridRef = useRef<HTMLDivElement>(null)
+  const glowRef = useRef<HTMLDivElement>(null)
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  useEffect(() => {
+    let ticking = false
+    const onScroll = () => {
+      if (!ticking) {
+        requestAnimationFrame(() => {
+          const y = window.scrollY
+          scrollRef.current = y
+          // Direct DOM manipulation — zero React re-renders
+          if (orbsRef.current[0]) orbsRef.current[0].style.transform = `translate3d(0, ${y * 0.08}px, 0)`
+          if (orbsRef.current[1]) orbsRef.current[1].style.transform = `translate3d(0, ${y * -0.06}px, 0)`
+          if (orbsRef.current[2]) orbsRef.current[2].style.transform = `translate3d(0, ${y * 0.05}px, 0)`
+          if (orbsRef.current[3]) orbsRef.current[3].style.transform = `translate3d(0, ${y * -0.04}px, 0)`
+          if (gridRef.current) gridRef.current.style.transform = `translate3d(0, ${y * 0.15}px, 0)`
+          if (glowRef.current) glowRef.current.style.transform = `translate(-50%, ${y * 0.1}px)`
+          ticking = false
+        })
+        ticking = true
+      }
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
+  const arch = useReveal(0.1)
+  const telegram = useReveal(0.1)
+  const cta = useReveal(0.1)
+
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
     setLoading(true)
@@ -198,10 +219,10 @@ export function LandingView() {
       setError('Something went wrong. Please try again.')
     }
     setLoading(false)
-  }
+  }, [loginMode, email, password, name, setUser, setIsAuthenticated, setView])
 
-  /* Auth dialog (reused) */
-  const AuthForm = () => (
+  /* Auth dialog — stable, no inline closure recreation */
+  const AuthForm = useMemo(() => (
     <form onSubmit={handleSubmit} className="space-y-4">
       {loginMode === 'register' && (
         <div>
@@ -251,26 +272,26 @@ export function LandingView() {
         </button>
       </p>
     </form>
-  )
+  ), [handleSubmit, loginMode, name, email, password, error, loading])
 
   return (
     <div className="min-h-screen flex flex-col bg-[#050508] text-white overflow-x-hidden landing-page">
-      {/* ─── Floating gradient orbs (parallax-driven) ─── */}
+      {/* ─── Floating gradient orbs (DOM-direct parallax — no React state) ─── */}
       <FloatingOrb
         className="w-[600px] h-[600px] bg-indigo-600/15 -top-40 -left-40"
-        style={{ transform: `translateY(${scrollY * 0.08}px)` }}
+        orbRef={(el) => { if (el) orbsRef.current[0] = el }}
       />
       <FloatingOrb
         className="w-[500px] h-[500px] bg-cyan-500/10 top-[30%] -right-60"
-        style={{ transform: `translateY(${scrollY * -0.06}px)` }}
+        orbRef={(el) => { if (el) orbsRef.current[1] = el }}
       />
       <FloatingOrb
         className="w-[400px] h-[400px] bg-violet-500/10 top-[65%] left-[10%]"
-        style={{ transform: `translateY(${scrollY * 0.05}px)` }}
+        orbRef={(el) => { if (el) orbsRef.current[2] = el }}
       />
       <FloatingOrb
         className="w-[350px] h-[350px] bg-emerald-500/8 top-[85%] right-[20%]"
-        style={{ transform: `translateY(${scrollY * -0.04}px)` }}
+        orbRef={(el) => { if (el) orbsRef.current[3] = el }}
       />
 
       {/* ─── Nav ─── */}
@@ -294,7 +315,7 @@ export function LandingView() {
               <Button
                 variant="outline"
                 size="sm"
-                className="text-xs h-9 border-white/10 bg-white/5 hover:bg-white/10 text-white backdrop-blur-sm"
+                className="text-xs h-9 border-white/10 bg-white/5 hover:bg-white/10 text-white"
               >
                 Sign In
               </Button>
@@ -310,7 +331,7 @@ export function LandingView() {
                     : 'Create your free account to start building agents'}
                 </DialogDescription>
               </DialogHeader>
-              <AuthForm />
+              {AuthForm}
             </DialogContent>
           </Dialog>
         </div>
@@ -318,22 +339,22 @@ export function LandingView() {
 
       {/* ─── Hero ─── */}
       <section className="relative pt-36 pb-28 md:pt-52 md:pb-40">
-        {/* Grid pattern (parallax) */}
+        {/* Grid pattern (DOM-direct parallax) */}
         <div
-          className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000_70%,transparent_100%)]"
-          style={{ transform: `translateY(${scrollY * 0.15}px)` }}
+          ref={gridRef}
+          className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_80%_50%_at_50%_0%,#000_70%,transparent_100%)] parallax-orb"
         />
 
-        {/* Radial glow behind headline */}
+        {/* Radial glow (DOM-direct parallax) */}
         <div
+          ref={glowRef}
           className="absolute top-20 left-1/2 -translate-x-1/2 w-[900px] h-[500px] rounded-full bg-gradient-to-b from-indigo-600/10 via-cyan-500/5 to-transparent pointer-events-none"
-          style={{ transform: `translate(-50%, ${scrollY * 0.1}px)` }}
         />
 
         <div className="relative container mx-auto px-4 md:px-6">
           <div className="max-w-4xl mx-auto text-center">
             {/* Eyebrow */}
-            <div className="inline-flex items-center gap-2.5 rounded-full border border-white/10 bg-white/[0.03] px-4 py-1.5 text-xs text-white/50 mb-10 backdrop-blur-sm hero-badge-enter">
+            <div className="inline-flex items-center gap-2.5 rounded-full border border-white/10 bg-white/[0.03] px-4 py-1.5 text-xs text-white/50 mb-10 hero-badge-enter">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
@@ -364,7 +385,7 @@ export function LandingView() {
                 <DialogTrigger asChild>
                   <Button
                     size="lg"
-                    className="bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-400 hover:to-cyan-400 text-white px-8 h-12 text-sm font-medium shadow-lg shadow-indigo-500/25 transition-all hover:shadow-indigo-500/40 hover:scale-[1.02] active:scale-[0.98]"
+                    className="bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-400 hover:to-cyan-400 text-white px-8 h-12 text-sm font-medium shadow-lg shadow-indigo-500/25 transition-shadow hover:shadow-indigo-500/40 active:scale-[0.98]"
                   >
                     Get Started
                     <ArrowRight className="ml-2 h-4 w-4" />
@@ -381,7 +402,7 @@ export function LandingView() {
                         : 'Create your free account to start building agents'}
                     </DialogDescription>
                   </DialogHeader>
-                  <AuthForm />
+                  {AuthForm}
                 </DialogContent>
               </Dialog>
 
@@ -408,7 +429,7 @@ export function LandingView() {
       <section id="architecture" className="relative py-28 md:py-40">
         <div
           ref={arch.ref}
-          className={`container mx-auto px-4 md:px-6 transition-all duration-1000 ${
+          className={`container mx-auto px-4 md:px-6 transition-all duration-700 ${
             arch.isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'
           }`}
         >
@@ -428,64 +449,25 @@ export function LandingView() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-[1px] max-w-5xl mx-auto rounded-2xl overflow-hidden bg-white/[0.04]">
-            {[
-              {
-                icon: <MessageSquare className="h-5 w-5" />,
-                title: 'Builder UI',
-                description: 'ChatGPT-like interface to configure your agent — name, personality, knowledge base, tools, and model settings.',
-                accent: 'from-indigo-500/20 to-transparent',
-              },
-              {
-                icon: <Cpu className="h-5 w-5" />,
-                title: 'API Gateway + Registry',
-                description: 'Handles auth, rate limiting, and routing. Agent Registry stores configs, versions, and ownership data.',
-                accent: 'from-cyan-500/20 to-transparent',
-              },
-              {
-                icon: <Box className="h-5 w-5" />,
-                title: 'Sandboxed Runtime',
-                description: 'Each agent runs in its own isolated container — no shared memory, no cross-user access.',
-                accent: 'from-emerald-500/20 to-transparent',
-              },
-              {
-                icon: <Lock className="h-5 w-5" />,
-                title: 'Shared Infrastructure',
-                description: 'Postgres with row-level security, object storage per user, vector DB namespaced per tenant, job queues.',
-                accent: 'from-violet-500/20 to-transparent',
-              },
-              {
-                icon: <Shield className="h-5 w-5" />,
-                title: 'Platform Services',
-                description: 'Auth with OAuth, usage metering, per-container monitoring, and comprehensive admin dashboard.',
-                accent: 'from-amber-500/20 to-transparent',
-              },
-              {
-                icon: <Terminal className="h-5 w-5" />,
-                title: 'Deploy Anywhere',
-                description: 'Docker Compose on a VPS for starters. Migrate to ECS/EKS when scaling. Same isolation guarantees everywhere.',
-                accent: 'from-rose-500/20 to-transparent',
-              },
-            ].map((layer, i) => (
+            {ARCHITECTURE_LAYERS.map((layer, i) => (
               <div
-                key={i}
-                className="group relative bg-[#0a0a10] p-7 hover:bg-[#0d0d16] transition-all duration-500 cursor-default"
+                key={layer.title}
+                className="group relative bg-[#0a0a10] p-7 hover:bg-[#0d0d16] transition-colors duration-300 cursor-default"
                 style={{
-                  transitionDelay: arch.isVisible ? `${i * 80}ms` : '0ms',
-                  opacity: arch.isVisible ? 1 : 0,
-                  transform: arch.isVisible ? 'translateY(0)' : 'translateY(20px)',
+                  transitionDelay: arch.isVisible ? `${i * 60}ms` : '0ms',
                 }}
               >
                 {/* Hover gradient glow */}
-                <div className={`absolute inset-0 bg-gradient-to-b ${layer.accent} opacity-0 group-hover:opacity-100 transition-opacity duration-500`} />
+                <div className={`absolute inset-0 bg-gradient-to-b ${layer.accent} opacity-0 group-hover:opacity-100 transition-opacity duration-300`} />
                 <div className="relative">
                   <div className="flex items-center gap-3 mb-4">
-                    <div className="text-white/30 group-hover:text-white/70 transition-colors duration-300">
-                      {layer.icon}
+                    <div className="text-white/30 group-hover:text-white/70 transition-colors duration-200">
+                      <layer.icon className="h-5 w-5" />
                     </div>
                     <span className="text-[11px] font-mono text-white/20 group-hover:text-white/40 transition-colors">0{i + 1}</span>
                   </div>
-                  <h3 className="font-semibold text-sm mb-2.5 text-white/80 group-hover:text-white transition-colors duration-300">{layer.title}</h3>
-                  <p className="text-[13px] text-white/25 leading-relaxed group-hover:text-white/45 transition-colors duration-300">{layer.description}</p>
+                  <h3 className="font-semibold text-sm mb-2.5 text-white/80 group-hover:text-white transition-colors duration-200">{layer.title}</h3>
+                  <p className="text-[13px] text-white/25 leading-relaxed group-hover:text-white/45 transition-colors duration-200">{layer.description}</p>
                 </div>
               </div>
             ))}
@@ -497,7 +479,7 @@ export function LandingView() {
       <section id="integrations" className="relative py-28 md:py-40">
         <div
           ref={telegram.ref}
-          className={`container mx-auto px-4 md:px-6 transition-all duration-1000 ${
+          className={`container mx-auto px-4 md:px-6 transition-all duration-700 ${
             telegram.isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'
           }`}
         >
@@ -520,26 +502,15 @@ export function LandingView() {
                 Your users can chat with your AI agent right from their phone, 24/7.
               </p>
               <div className="space-y-5">
-                {[
-                  'Create a bot via @BotFather in Telegram',
-                  'Paste the bot token in your agent settings',
-                  'Hit Publish — webhook is set up automatically',
-                  'Your agent responds on Telegram in real-time',
-                ].map((step, i) => (
+                {TELEGRAM_STEPS.map((step, i) => (
                   <div
                     key={i}
                     className="flex items-center gap-4 group"
-                    style={{
-                      transitionDelay: telegram.isVisible ? `${(i + 2) * 100}ms` : '0ms',
-                      opacity: telegram.isVisible ? 1 : 0,
-                      transform: telegram.isVisible ? 'translateX(0)' : 'translateX(-20px)',
-                      transition: 'all 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
-                    }}
                   >
-                    <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/8 bg-white/[0.03] text-xs font-mono text-white/30 group-hover:border-indigo-500/30 group-hover:text-indigo-400 transition-all duration-300 shrink-0">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/8 bg-white/[0.03] text-xs font-mono text-white/30 group-hover:border-indigo-500/30 group-hover:text-indigo-400 transition-colors duration-200 shrink-0">
                       {i + 1}
                     </span>
-                    <span className="text-sm text-white/50 group-hover:text-white/80 transition-colors duration-300">{step}</span>
+                    <span className="text-sm text-white/50 group-hover:text-white/80 transition-colors duration-200">{step}</span>
                   </div>
                 ))}
               </div>
@@ -550,7 +521,7 @@ export function LandingView() {
               {/* Glow behind */}
               <div className="absolute -inset-8 bg-gradient-to-br from-indigo-500/10 via-transparent to-cyan-500/10 rounded-3xl blur-2xl pointer-events-none" />
 
-              <div className="relative rounded-2xl border border-white/[0.06] bg-[#0a0a0f]/90 backdrop-blur-xl p-6 shadow-2xl shadow-black/40">
+              <div className="relative rounded-2xl border border-white/[0.06] bg-[#0a0a0f]/90 p-6 shadow-2xl shadow-black/40">
                 <div className="flex items-center gap-2.5 mb-5 pb-4 border-b border-white/[0.06]">
                   <div className="h-9 w-9 rounded-full bg-gradient-to-br from-indigo-500 to-cyan-400 flex items-center justify-center shadow-lg shadow-indigo-500/20">
                     <Send className="h-4 w-4 text-white" />
@@ -618,7 +589,7 @@ export function LandingView() {
       <section className="relative py-32 md:py-44">
         <div
           ref={cta.ref}
-          className={`container mx-auto px-4 md:px-6 text-center transition-all duration-1000 ${
+          className={`container mx-auto px-4 md:px-6 text-center transition-all duration-700 ${
             cta.isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-12'
           }`}
         >
@@ -640,7 +611,7 @@ export function LandingView() {
               <DialogTrigger asChild>
                 <Button
                   size="lg"
-                  className="bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-400 hover:to-cyan-400 text-white px-10 h-12 text-sm font-medium shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 transition-all hover:scale-[1.02] active:scale-[0.98]"
+                  className="bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-400 hover:to-cyan-400 text-white px-10 h-12 text-sm font-medium shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 transition-shadow active:scale-[0.98]"
                 >
                   Start Building
                   <ArrowRight className="ml-2 h-4 w-4" />
@@ -657,7 +628,7 @@ export function LandingView() {
                       : 'Create your free account to start building agents'}
                   </DialogDescription>
                 </DialogHeader>
-                <AuthForm />
+                {AuthForm}
               </DialogContent>
             </Dialog>
           </div>

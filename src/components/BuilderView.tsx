@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -160,8 +160,9 @@ export function BuilderView() {
   }
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [chatMessages])
+    // Use instant scroll to avoid jank from smooth scroll on every message
+    chatEndRef.current?.scrollIntoView({ behavior: chatMessages.length <= 2 ? 'smooth' : 'instant' })
+  }, [chatMessages.length])
 
   const handleSave = async () => {
     if (!selectedAgentId || !user?.id) return
@@ -255,13 +256,8 @@ export function BuilderView() {
     setChatInput('')
     setChatLoading(true)
 
-    try {
-      await fetch(`/api/agents/${selectedAgentId}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, description, systemPrompt, model, temperature, tools }),
-      })
-    } catch {}
+    // Skip pre-save PATCH — the chat API uses the model stored in DB already.
+    // Saving on every chat message doubles network requests for no user benefit.
 
     try {
       const res = await fetch('/api/chat', {
@@ -368,13 +364,13 @@ export function BuilderView() {
     setKnowledgeLoading(false)
   }
 
-  const toggleTool = (toolId: string) => {
+  const toggleTool = useCallback((toolId: string) => {
     setTools((prev) =>
       prev.includes(toolId)
         ? prev.filter((t) => t !== toolId)
         : [...prev, toolId]
     )
-  }
+  }, [])
 
   if (loading) {
     return (

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -175,19 +175,19 @@ export function DashboardView() {
     }
   }
 
-  const statusStyles: Record<string, string> = {
+  const statusStyles = useMemo<Record<string, string>>(() => ({
     draft: 'bg-muted text-muted-foreground',
     deploying: 'bg-foreground/10 text-foreground',
     published: 'bg-foreground text-background',
     stopped: 'bg-red-500/10 text-red-400',
-  }
+  }), [])
 
-  const statusIcons: Record<string, typeof Pencil> = {
+  const statusIcons = useMemo<Record<string, typeof Pencil>>(() => ({
     draft: Pencil,
     deploying: Loader2,
     published: Play,
     stopped: Square,
-  }
+  }), [])
 
   if (loading) {
     return (

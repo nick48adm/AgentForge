@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -108,19 +108,19 @@ export function AdminView() {
     )
   }
 
-  const statusStyles: Record<string, string> = {
+  const statusStyles = useMemo<Record<string, string>>(() => ({
     draft: 'bg-muted text-muted-foreground',
     deploying: 'bg-foreground/10 text-foreground',
     published: 'bg-foreground text-background',
     stopped: 'bg-red-500/10 text-red-400',
     suspended: 'bg-red-500/10 text-red-400',
-  }
+  }), [])
 
-  const planStyles: Record<string, string> = {
+  const planStyles = useMemo<Record<string, string>>(() => ({
     free: 'bg-muted text-muted-foreground',
     pro: 'bg-foreground text-background',
     enterprise: 'bg-foreground/70 text-background',
-  }
+  }), [])
 
   return (
     <div className="container mx-auto px-4 md:px-6 py-8 max-w-5xl">
