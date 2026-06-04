@@ -10,15 +10,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   try {
     const body = await req.json()
-    const updateData: any = {}
-    // Admin can only toggle plan/status
+    const updateData: { status?: string; plan?: string } = {}
+    // Admin can only toggle status
     if (body.status !== undefined && ['draft','stopped','failed'].includes(body.status)) updateData.status = body.status
     if (body.plan !== undefined && ['free','pro','enterprise'].includes(body.plan)) updateData.plan = body.plan
 
-    const agent = await db.agent.update({ where: { id }, data: updateData })
+    const agent = await db.agent.update({ where: { id }, data: updateData as any })
     return NextResponse.json(agent)
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Unknown error" }, { status: 500 })
   }
 }
 
@@ -35,7 +35,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     await stopSandbox(id, agent.version)
     await db.agent.update({ where: { id }, data: { status: 'stopped', containerId: null, sandboxUrl: null } })
     return NextResponse.json({ success: true, message: 'Container force-killed' })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Unknown error" }, { status: 500 })
   }
 }

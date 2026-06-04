@@ -54,7 +54,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ age
     })
 
     return NextResponse.json({ success: true })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[whatsapp-webhook]', error)
     return NextResponse.json({ success: true })
   }

@@ -9,9 +9,11 @@ export default withAuth(
     callbacks: {
       authorized({ token, req }) {
         const path = req.nextUrl.pathname
-        // Public auth pages
-        if (path === '/login' || path === '/signup') return true
-        // Settings requires auth
+        // Public pages — always accessible
+        if (path === '/' || path === '/login' || path === '/signup') return true
+        // Static assets
+        if (path.startsWith('/_next') || path.startsWith('/api/auth')) return true
+        // Protected pages — require auth
         if (path.startsWith('/settings')) return !!token
         return !!token
       },

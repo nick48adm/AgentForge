@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/session'
 
+interface GroqModel {
+  id: string
+  owned_by: string
+}
+
 // ── Static NVIDIA NIM models ──────────────────────────────────────────────────
 const NVIDIA_NIM_MODELS = [
   { id: 'moonshotai/kimi-k2.6', label: 'Kimi 2.6', description: 'Moonshot reasoning model' },
@@ -23,10 +28,10 @@ const ANTHROPIC_MODELS = [
 ]
 
 // ── Groq model cache (5 minutes) ──────────────────────────────────────────────
-let groqCache: { data: { id: string; owned_by: string }[]; expiresAt: number } | null = null
+let groqCache: { data: GroqModel[]; expiresAt: number } | null = null
 const CACHE_TTL_MS = 5 * 60 * 1000
 
-async function fetchGroqModels(): Promise<{ id: string; owned_by: string }[]> {
+async function fetchGroqModels(): Promise<GroqModel[]> {
   if (groqCache && Date.now() < groqCache.expiresAt) {
     return groqCache.data
   }
@@ -47,15 +52,20 @@ async function fetchGroqModels(): Promise<{ id: string; owned_by: string }[]> {
 
     const json = await res.json()
     // Filter out audio/whisper models — only keep text chat models
-    const models = (json.data || [])
-      .filter((m: any) => !m.id.includes('whisper') && !m.id.includes('distil-whisper'))
-      .map((m: any) => ({ id: m.id, owned_by: m.owned_by }))
-      .sort((a: any, b: any) => a.id.localeCompare(b.id))
+    const models: GroqModel[] = (json.data || [])
+      .filter((m: Record<string, unknown>) =>
+        typeof m.id === 'string' && !m.id.includes('whisper') && !m.id.includes('distil-whisper')
+      )
+      .map((m: Record<string, unknown>) => ({
+        id: String(m.id),
+        owned_by: String(m.owned_by ?? 'unknown'),
+      }))
+      .sort((a: GroqModel, b: GroqModel) => a.id.localeCompare(b.id))
 
     groqCache = { data: models, expiresAt: Date.now() + CACHE_TTL_MS }
     return models
-  } catch (e: any) {
-    console.error('[models] Failed to fetch Groq models:', e.message)
+  } catch (e: unknown) {
+    console.error('[models] Failed to fetch Groq models:', e instanceof Error ? e.message : 'Unknown error')
     return groqCache?.data || []
   }
 }

@@ -41,6 +41,10 @@ import {
   FileText,
   Trash2,
   Upload,
+  Gamepad2,
+  MessageCircle,
+  Code2,
+  Copy,
 } from 'lucide-react'
 
 interface AgentConfig {
@@ -90,7 +94,7 @@ export function BuilderView() {
   const [model, setModel] = useState('llama-3.3-70b-versatile')
   const [temperature, setTemperature] = useState(0.7)
   const [tools, setTools] = useState<string[]>([])
-  const [activeTab, setActiveTab] = useState<'config' | 'knowledge' | 'telegram'>('config')
+  const [activeTab, setActiveTab] = useState<'config' | 'knowledge' | 'telegram' | 'discord' | 'whatsapp' | 'widget'>('config')
 
   // Chat state
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
@@ -104,6 +108,26 @@ export function BuilderView() {
   const [telegramConnecting, setTelegramConnecting] = useState(false)
   const [telegramError, setTelegramError] = useState('')
   const [telegramSuccess, setTelegramSuccess] = useState('')
+
+  // Discord state
+  const [discordBotToken, setDiscordBotToken] = useState('')
+  const [discordGuildId, setDiscordGuildId] = useState('')
+  const [discordConnecting, setDiscordConnecting] = useState(false)
+  const [discordError, setDiscordError] = useState('')
+  const [discordSuccess, setDiscordSuccess] = useState('')
+
+  // WhatsApp state
+  const [whatsappPhoneNumberId, setWhatsappPhoneNumberId] = useState('')
+  const [whatsappAccessToken, setWhatsappAccessToken] = useState('')
+  const [whatsappVerifyToken, setWhatsappVerifyToken] = useState('')
+  const [whatsappConnecting, setWhatsappConnecting] = useState(false)
+  const [whatsappError, setWhatsappError] = useState('')
+  const [whatsappSuccess, setWhatsappSuccess] = useState('')
+
+  // Channels state
+  const [channels, setChannels] = useState<any[]>([])
+  const [widgetEmbedCode, setWidgetEmbedCode] = useState<string>('')
+  const [copiedEmbed, setCopiedEmbed] = useState(false)
 
   // Knowledge state
   const [knowledgeText, setKnowledgeText] = useState('')
@@ -137,6 +161,7 @@ export function BuilderView() {
         }
       } catch {}
       setLoading(false)
+      fetchChannels()
     }
     load()
   }, [selectedAgentId, user?.id])
@@ -154,6 +179,18 @@ export function BuilderView() {
         setModel(data.model || 'llama-3.3-70b-versatile')
         setTemperature(data.temperature ?? 0.7)
         setTools(JSON.parse(data.tools || '[]'))
+      }
+    } catch {}
+  }
+
+  const fetchChannels = async () => {
+    if (!selectedAgentId) return
+    try {
+      const res = await fetch(`/api/channels/list/${selectedAgentId}`)
+      if (res.ok) {
+        const data = await res.json()
+        setChannels(data.channels || [])
+        if (data.widgetEmbedCode) setWidgetEmbedCode(data.widgetEmbedCode)
       }
     } catch {}
   }
@@ -265,7 +302,7 @@ export function BuilderView() {
         body: JSON.stringify({
           agentId: selectedAgentId,
           message: userMsg.content,
-          conversationId,
+          ...(conversationId ? { conversationId } : {}),
         }),
       })
       if (res.ok) {
@@ -312,6 +349,7 @@ export function BuilderView() {
         setTelegramSuccess(data.message)
         setTelegramToken('')
         fetchAgent()
+        fetchChannels()
       } else {
         setTelegramError(data.error)
       }
@@ -330,8 +368,106 @@ export function BuilderView() {
         body: JSON.stringify({ agentId: selectedAgentId }),
       })
       fetchAgent()
+      fetchChannels()
     } catch {}
   }
+
+  const handleDiscordConnect = async () => {
+    if (!discordBotToken.trim() || !selectedAgentId || !user?.id) return
+    setDiscordConnecting(true)
+    setDiscordError('')
+    setDiscordSuccess('')
+
+    try {
+      const res = await fetch('/api/channels/discord/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: selectedAgentId, botToken: discordBotToken, guildId: discordGuildId || undefined }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setDiscordSuccess(data.message || 'Discord bot connected successfully')
+        setDiscordBotToken('')
+        setDiscordGuildId('')
+        fetchAgent()
+        fetchChannels()
+      } else {
+        setDiscordError(data.error || 'Failed to connect')
+      }
+    } catch {
+      setDiscordError('Failed to connect. Please try again.')
+    }
+    setDiscordConnecting(false)
+  }
+
+  const handleDiscordDisconnect = async () => {
+    if (!selectedAgentId || !user?.id) return
+    try {
+      await fetch('/api/channels/discord/connect', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: selectedAgentId }),
+      })
+      fetchAgent()
+      fetchChannels()
+    } catch {}
+  }
+
+  const handleWhatsappConnect = async () => {
+    if (!whatsappPhoneNumberId.trim() || !whatsappAccessToken.trim() || !whatsappVerifyToken.trim() || !selectedAgentId || !user?.id) return
+    setWhatsappConnecting(true)
+    setWhatsappError('')
+    setWhatsappSuccess('')
+
+    try {
+      const res = await fetch('/api/channels/whatsapp/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          agentId: selectedAgentId,
+          phoneNumberId: whatsappPhoneNumberId,
+          accessToken: whatsappAccessToken,
+          verifyToken: whatsappVerifyToken,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setWhatsappSuccess(data.message || 'WhatsApp connected successfully')
+        setWhatsappPhoneNumberId('')
+        setWhatsappAccessToken('')
+        setWhatsappVerifyToken('')
+        fetchAgent()
+        fetchChannels()
+      } else {
+        setWhatsappError(data.error || 'Failed to connect')
+      }
+    } catch {
+      setWhatsappError('Failed to connect. Please try again.')
+    }
+    setWhatsappConnecting(false)
+  }
+
+  const handleWhatsappDisconnect = async () => {
+    if (!selectedAgentId || !user?.id) return
+    try {
+      await fetch('/api/channels/whatsapp/connect', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agentId: selectedAgentId }),
+      })
+      fetchAgent()
+      fetchChannels()
+    } catch {}
+  }
+
+  const copyEmbedCode = () => {
+    navigator.clipboard.writeText(widgetEmbedCode)
+    setCopiedEmbed(true)
+    setTimeout(() => setCopiedEmbed(false), 2000)
+  }
+
+  const discordChannel = channels.find((c: any) => c.type === 'discord' || c.channelType === 'discord')
+  const whatsappChannel = channels.find((c: any) => c.type === 'whatsapp' || c.channelType === 'whatsapp')
 
   const handleKnowledgeUpload = async () => {
     if (!knowledgeText.trim() || !knowledgeName.trim() || !selectedAgentId || !user?.id) return
@@ -461,6 +597,9 @@ export function BuilderView() {
               { id: 'config' as const, label: 'Config', icon: Settings },
               { id: 'knowledge' as const, label: 'Knowledge', icon: FileText },
               { id: 'telegram' as const, label: 'Telegram', icon: TelegramIcon },
+              { id: 'discord' as const, label: 'Discord', icon: Gamepad2 },
+              { id: 'whatsapp' as const, label: 'WhatsApp', icon: MessageCircle },
+              { id: 'widget' as const, label: 'Widget', icon: Code2 },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -760,6 +899,341 @@ export function BuilderView() {
                 <p className="text-[10px] text-muted-foreground">
                   The webhook will be automatically configured when you publish your agent.
                   Messages sent to your Telegram bot will be forwarded to this agent.
+                </p>
+              </>
+            )}
+
+            {/* Discord Tab */}
+            {activeTab === 'discord' && (
+              <>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">Connect to Discord</Label>
+                  <p className="text-[10px] text-muted-foreground">
+                    Connect your agent to a Discord bot so it can respond to messages in your server.
+                  </p>
+                </div>
+
+                {/* Setup instructions */}
+                <div className="rounded-md border border-border/50 p-3 space-y-2">
+                  <div className="text-xs font-medium">Setup Steps:</div>
+                  <ol className="space-y-1.5 text-[10px] text-muted-foreground">
+                    {[
+                      'Go to discord.com/developers and create a New Application',
+                      'Navigate to the Bot section and click "Add Bot"',
+                      'Copy the Bot Token from the bot page',
+                      'Enable MESSAGE CONTENT INTENT under Privileged Gateway Intents',
+                      'Optional: Enter your Guild/Server ID to restrict to one server',
+                      'Set the Interactions Endpoint URL to your agent\'s webhook after publishing',
+                      'Paste the bot token below and click Connect Bot',
+                    ].map((step, i) => (
+                      <li key={i} className="flex gap-2">
+                        <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-border text-[9px] font-mono">
+                          {i + 1}
+                        </span>
+                        {step}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+
+                {/* Current connection status */}
+                {discordChannel ? (
+                  <div className="rounded-md border border-border/50 p-3">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
+                        <Gamepad2 className="h-3.5 w-3.5" />
+                      </div>
+                      <div>
+                        <div className="font-medium text-xs">
+                          {discordChannel.botUsername || discordChannel.username || 'Discord Bot'}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">
+                          {discordChannel.guildId ? `Guild: ${discordChannel.guildId}` : 'Connected'}
+                        </div>
+                      </div>
+                      <Badge
+                        variant="secondary"
+                        className="bg-foreground text-background ml-auto text-[10px]"
+                      >
+                        Active
+                      </Badge>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full text-red-400 hover:text-red-500 h-7 text-[11px]"
+                      onClick={handleDiscordDisconnect}
+                    >
+                      <X className="h-3 w-3 mr-1" />
+                      Disconnect Bot
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    <Input
+                      placeholder="Bot Token"
+                      value={discordBotToken}
+                      onChange={(e) => {
+                        setDiscordBotToken(e.target.value)
+                        setDiscordError('')
+                        setDiscordSuccess('')
+                      }}
+                      type="password"
+                      className="h-8 text-sm"
+                    />
+                    <Input
+                      placeholder="Guild/Server ID (optional)"
+                      value={discordGuildId}
+                      onChange={(e) => {
+                        setDiscordGuildId(e.target.value)
+                        setDiscordError('')
+                        setDiscordSuccess('')
+                      }}
+                      className="h-8 text-sm"
+                    />
+                    {discordError && (
+                      <p className="text-[10px] text-red-400 flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" />
+                        {discordError}
+                      </p>
+                    )}
+                    {discordSuccess && (
+                      <p className="text-[10px] text-foreground flex items-center gap-1">
+                        <Check className="h-3 w-3" />
+                        {discordSuccess}
+                      </p>
+                    )}
+                    <Button
+                      onClick={handleDiscordConnect}
+                      className="w-full bg-foreground text-background hover:bg-foreground/90 h-8 text-xs"
+                      disabled={discordConnecting || !discordBotToken.trim()}
+                    >
+                      {discordConnecting ? (
+                        <Loader2 className="h-3 w-3 animate-spin mr-1.5" />
+                      ) : (
+                        <Gamepad2 className="h-3 w-3 mr-1.5" />
+                      )}
+                      Connect Bot
+                    </Button>
+                  </div>
+                )}
+
+                <p className="text-[10px] text-muted-foreground">
+                  The interactions endpoint URL will be configured automatically when you publish your agent.
+                  Make sure to enable the Message Content Intent in the Discord Developer Portal.
+                </p>
+              </>
+            )}
+
+            {/* WhatsApp Tab */}
+            {activeTab === 'whatsapp' && (
+              <>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">Connect to WhatsApp</Label>
+                  <p className="text-[10px] text-muted-foreground">
+                    Connect your agent to WhatsApp Business API so customers can chat with it directly.
+                  </p>
+                </div>
+
+                {/* Setup instructions */}
+                <div className="rounded-md border border-border/50 p-3 space-y-2">
+                  <div className="text-xs font-medium">Setup Steps:</div>
+                  <ol className="space-y-1.5 text-[10px] text-muted-foreground">
+                    {[
+                      'Go to business.facebook.com and create a Business Account',
+                      'Navigate to WhatsApp Manager and create a Phone Number',
+                      'Go to API Setup and copy the Phone Number ID',
+                      'Generate a Permanent Access Token from System Users',
+                      'Set a Verify Token (any custom string you choose)',
+                      'Configure the webhook URL to your agent\'s endpoint after publishing',
+                      'Enter the credentials below and click Connect',
+                    ].map((step, i) => (
+                      <li key={i} className="flex gap-2">
+                        <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-border text-[9px] font-mono">
+                          {i + 1}
+                        </span>
+                        {step}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+
+                {/* Current connection status */}
+                {whatsappChannel ? (
+                  <div className="rounded-md border border-border/50 p-3">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center">
+                        <MessageCircle className="h-3.5 w-3.5" />
+                      </div>
+                      <div>
+                        <div className="font-medium text-xs">
+                          {whatsappChannel.phoneNumberId || whatsappChannel.phoneNumber || 'WhatsApp Bot'}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">
+                          Connected via WhatsApp Business API
+                        </div>
+                      </div>
+                      <Badge
+                        variant="secondary"
+                        className="bg-foreground text-background ml-auto text-[10px]"
+                      >
+                        Active
+                      </Badge>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full text-red-400 hover:text-red-500 h-7 text-[11px]"
+                      onClick={handleWhatsappDisconnect}
+                    >
+                      <X className="h-3 w-3 mr-1" />
+                      Disconnect
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    <Input
+                      placeholder="Phone Number ID"
+                      value={whatsappPhoneNumberId}
+                      onChange={(e) => {
+                        setWhatsappPhoneNumberId(e.target.value)
+                        setWhatsappError('')
+                        setWhatsappSuccess('')
+                      }}
+                      className="h-8 text-sm"
+                    />
+                    <Input
+                      placeholder="Access Token"
+                      value={whatsappAccessToken}
+                      onChange={(e) => {
+                        setWhatsappAccessToken(e.target.value)
+                        setWhatsappError('')
+                        setWhatsappSuccess('')
+                      }}
+                      type="password"
+                      className="h-8 text-sm"
+                    />
+                    <Input
+                      placeholder="Verify Token (custom string)"
+                      value={whatsappVerifyToken}
+                      onChange={(e) => {
+                        setWhatsappVerifyToken(e.target.value)
+                        setWhatsappError('')
+                        setWhatsappSuccess('')
+                      }}
+                      className="h-8 text-sm"
+                    />
+                    {whatsappError && (
+                      <p className="text-[10px] text-red-400 flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" />
+                        {whatsappError}
+                      </p>
+                    )}
+                    {whatsappSuccess && (
+                      <p className="text-[10px] text-foreground flex items-center gap-1">
+                        <Check className="h-3 w-3" />
+                        {whatsappSuccess}
+                      </p>
+                    )}
+                    <Button
+                      onClick={handleWhatsappConnect}
+                      className="w-full bg-foreground text-background hover:bg-foreground/90 h-8 text-xs"
+                      disabled={whatsappConnecting || !whatsappPhoneNumberId.trim() || !whatsappAccessToken.trim() || !whatsappVerifyToken.trim()}
+                    >
+                      {whatsappConnecting ? (
+                        <Loader2 className="h-3 w-3 animate-spin mr-1.5" />
+                      ) : (
+                        <MessageCircle className="h-3 w-3 mr-1.5" />
+                      )}
+                      Connect
+                    </Button>
+                  </div>
+                )}
+
+                <p className="text-[10px] text-muted-foreground">
+                  The webhook URL will be configured automatically when you publish your agent.
+                  Make sure your WhatsApp Business API account is approved and out of the sandbox.
+                </p>
+              </>
+            )}
+
+            {/* Widget Tab */}
+            {activeTab === 'widget' && (
+              <>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">Chat Widget</Label>
+                  <p className="text-[10px] text-muted-foreground">
+                    Embed a chat widget on any website to let visitors interact with your agent.
+                  </p>
+                </div>
+
+                {/* Setup instructions */}
+                <div className="rounded-md border border-border/50 p-3 space-y-2">
+                  <div className="text-xs font-medium">How to Embed:</div>
+                  <ol className="space-y-1.5 text-[10px] text-muted-foreground">
+                    {[
+                      'Publish your agent first to generate the embed code',
+                      'Copy the embed script below',
+                      'Paste it into your website\'s HTML before the closing </body> tag',
+                      'The chat widget will appear as a floating button in the bottom-right corner',
+                    ].map((step, i) => (
+                      <li key={i} className="flex gap-2">
+                        <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded border border-border text-[9px] font-mono">
+                          {i + 1}
+                        </span>
+                        {step}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+
+                {/* Embed code */}
+                {agent.status === 'published' && widgetEmbedCode ? (
+                  <div className="space-y-2.5">
+                    <div className="relative">
+                      <pre className="rounded-md border border-border/50 bg-muted/50 p-3 text-[10px] font-mono text-muted-foreground overflow-x-auto max-h-40 overflow-y-auto whitespace-pre-wrap break-all">
+                        {widgetEmbedCode}
+                      </pre>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="absolute top-2 right-2 h-6 w-6 p-0"
+                        onClick={copyEmbedCode}
+                      >
+                        {copiedEmbed ? (
+                          <Check className="h-3 w-3 text-foreground" />
+                        ) : (
+                          <Copy className="h-3 w-3" />
+                        )}
+                      </Button>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full h-7 text-[11px]"
+                      onClick={copyEmbedCode}
+                    >
+                      {copiedEmbed ? (
+                        <Check className="h-3 w-3 mr-1 text-foreground" />
+                      ) : (
+                        <Copy className="h-3 w-3 mr-1" />
+                      )}
+                      {copiedEmbed ? 'Copied!' : 'Copy Embed Code'}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="rounded-md border border-border/50 p-4 text-center">
+                    <Code2 className="h-6 w-6 text-muted-foreground mx-auto mb-2" />
+                    <p className="text-[10px] text-muted-foreground">
+                      {agent.status === 'published'
+                        ? 'No embed code available yet. Try refreshing.'
+                        : 'Publish your agent first to generate the widget embed code.'}
+                    </p>
+                  </div>
+                )}
+
+                <p className="text-[10px] text-muted-foreground">
+                  The widget is fully customizable. You can modify the appearance by adding data attributes to the script tag.
                 </p>
               </>
             )}

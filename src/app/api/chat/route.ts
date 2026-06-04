@@ -6,6 +6,9 @@ import { chatLimit } from '@/lib/rate-limit'
 import { chatCompletion, type LLMMessage } from '@/lib/llm'
 import { chatSchema } from '@/lib/validations'
 import { calculateCost } from '@/lib/channel-chat'
+import { executeTool, getEnabledToolDefs } from '@/lib/tools'
+
+const MAX_TOOL_ROUNDS = 5
 
 export async function POST(req: NextRequest) {
   const auth = await requireAuth()
@@ -59,7 +62,6 @@ export async function POST(req: NextRequest) {
     let knowledgeContext = ''
     if (agent.knowledgeBases && agent.knowledgeBases.length > 0) {
       const knowledgeSections = agent.knowledgeBases.map((kb, i) => {
-        // Truncate individual knowledge entries to 4000 chars to prevent prompt overflow
         const maxLen = 4000
         const truncated = kb.content.length > maxLen ? kb.content.slice(0, maxLen) + '\n[...truncated]' : kb.content
         return `--- ${kb.fileName} ---\n${truncated}`
@@ -85,14 +87,14 @@ export async function POST(req: NextRequest) {
       } catch (e: unknown) {
         const errMsg = e instanceof Error ? e.message : 'Unknown error'
         console.error('[chat] sandbox error, falling back:', errMsg)
-        const result = await directLLM(agent.systemPrompt, agent.model, agent.temperature, messages, knowledgeContext)
+        const result = await directLLMWithTools(agent.systemPrompt, agent.model, agent.temperature, messages, knowledgeContext, agent.tools as string[])
         assistantContent = result.content
         tokensIn = result.tokensIn
         tokensOut = result.tokensOut
       }
     } else {
-      // Draft / preview
-      const result = await directLLM(agent.systemPrompt, agent.model, agent.temperature, messages, knowledgeContext)
+      // Draft / preview — with tool execution
+      const result = await directLLMWithTools(agent.systemPrompt, agent.model, agent.temperature, messages, knowledgeContext, agent.tools as string[])
       assistantContent = result.content
       tokensIn = result.tokensIn
       tokensOut = result.tokensOut
@@ -113,6 +115,86 @@ export async function POST(req: NextRequest) {
     console.error('[chat]', error)
     return NextResponse.json({ error: 'Failed to process chat message' }, { status: 500 })
   }
+}
+
+
+async function directLLMWithTools(
+  systemPrompt: string,
+  model: string,
+  temperature: number,
+  messages: Array<Record<string, unknown>>,
+  knowledgeContext: string,
+  agentTools: unknown,
+): Promise<{ content: string; tokensIn: number; tokensOut: number }> {
+  // Parse enabled tools
+  let enabledTools: string[] = []
+  try {
+    enabledTools = Array.isArray(agentTools) ? agentTools : JSON.parse(String(agentTools || '[]'))
+  } catch { enabledTools = [] }
+
+  // If no tools enabled, use the simple direct LLM path
+  if (enabledTools.length === 0) {
+    return directLLM(systemPrompt, model, temperature, messages, knowledgeContext)
+  }
+
+  // Build LLM messages with tool support
+  const llmMessages: LLMMessage[] = []
+  if (systemPrompt || knowledgeContext) {
+    llmMessages.push({ role: 'system', content: (systemPrompt || '') + knowledgeContext })
+  }
+  for (const m of messages.slice(-20)) {
+    const role = String(m.role ?? '')
+    const content = String(m.content ?? '')
+    if (role === 'user' || role === 'assistant') llmMessages.push({ role, content })
+  }
+
+  const toolDefs = getEnabledToolDefs(enabledTools)
+  let totalTokensIn = 0
+  let totalTokensOut = 0
+
+  // Agentic tool loop — up to MAX_TOOL_ROUNDS rounds
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    try {
+      const result = await chatCompletion(model, llmMessages, temperature, toolDefs.length > 0 ? toolDefs : undefined)
+      totalTokensIn += result.tokensIn
+      totalTokensOut += result.tokensOut
+
+      // If no tool calls, return the response directly
+      if (!result.toolCalls || result.toolCalls.length === 0) {
+        return {
+          content: result.content || 'Unable to generate a response.',
+          tokensIn: totalTokensIn,
+          tokensOut: totalTokensOut,
+        }
+      }
+
+      // Process tool calls
+      llmMessages.push({
+        role: 'assistant',
+        content: result.content || '',
+        tool_calls: result.toolCalls,
+      })
+
+      for (const tc of result.toolCalls) {
+        let args: Record<string, unknown> = {}
+        try { args = JSON.parse(tc.function.arguments) } catch {}
+        const toolResult = await executeTool(tc.function.name, args)
+
+        llmMessages.push({
+          role: 'tool',
+          tool_call_id: tc.id,
+          content: JSON.stringify(toolResult),
+        })
+      }
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Unknown error'
+      console.error('[chat] LLM with tools error:', msg)
+      // Fall back to simple LLM call without tools
+      return directLLM(systemPrompt, model, temperature, messages, knowledgeContext)
+    }
+  }
+
+  return { content: 'Maximum tool call rounds reached. Please try a simpler query.', tokensIn: totalTokensIn, tokensOut: totalTokensOut }
 }
 
 

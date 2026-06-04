@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -49,12 +49,17 @@ interface Agent {
 }
 
 interface UsageData {
-  totalTokensIn: number
-  totalTokensOut: number
-  totalCost: number
-  agentCount: number
-  publishedCount: number
-  conversationCount: number
+  summary: {
+    totalTokensIn: number
+    totalTokensOut: number
+    totalCost: number
+    agentCount: number
+    publishedCount: number
+    conversationCount: number
+    totalMessages: number
+  }
+  dailyUsage: Record<string, { tokensIn: number; tokensOut: number; cost: number; count: number }>
+  recentUsage: Array<Record<string, unknown>>
 }
 
 export function DashboardView() {
@@ -214,22 +219,22 @@ export function DashboardView() {
         {[
           {
             label: 'Agents',
-            value: usage?.agentCount ?? agents.length,
+            value: usage?.summary?.agentCount ?? agents.length,
             icon: Bot,
           },
           {
             label: 'Published',
-            value: usage?.publishedCount ?? 0,
+            value: usage?.summary?.publishedCount ?? 0,
             icon: Play,
           },
           {
             label: 'Conversations',
-            value: usage?.conversationCount ?? 0,
+            value: usage?.summary?.conversationCount ?? 0,
             icon: MessageSquare,
           },
           {
             label: 'Tokens Used',
-            value: ((usage?.totalTokensIn ?? 0) + (usage?.totalTokensOut ?? 0)).toLocaleString(),
+            value: ((usage?.summary?.totalTokensIn ?? 0) + (usage?.summary?.totalTokensOut ?? 0)).toLocaleString(),
             icon: Zap,
           },
         ].map((stat, i) => (

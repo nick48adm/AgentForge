@@ -5,6 +5,10 @@
  * Supports: Groq, NVIDIA NIM, OpenAI, Anthropic
  */
 
+import type { ToolDefinition } from './tools'
+
+export type { ToolDefinition }
+
 const NIM_MODELS = [
   'moonshotai/kimi-k2.6',
   'z-ai/glm-5.1',
@@ -39,6 +43,7 @@ export interface LLMResult {
   content: string
   tokensIn: number
   tokensOut: number
+  toolCalls?: Array<{ id: string; function: { name: string; arguments: string } }>
 }
 
 export function getProviderForModel(model: string): LLMProvider {
@@ -92,7 +97,6 @@ async function sleep(ms: number): Promise<void> {
 }
 
 function isRetryable(status: number): boolean {
-  // Retry on rate limits and server errors
   return status === 429 || status >= 500
 }
 
@@ -102,7 +106,6 @@ async function anthropicChatCompletion(
   temperature: number,
   apiKey: string
 ): Promise<LLMResult> {
-  // Separate system message from conversation
   const systemMsg = messages.find(m => m.role === 'system')
   const conversationMsgs = messages.filter(m => m.role !== 'system')
 
@@ -151,7 +154,8 @@ async function anthropicChatCompletion(
 export async function chatCompletion(
   model: string,
   messages: LLMMessage[],
-  temperature: number
+  temperature: number,
+  tools?: ToolDefinition[]
 ): Promise<LLMResult> {
   const provider = getProviderForModel(model)
   const { endpoint, apiKey } = getEndpointAndKey(provider)
@@ -160,20 +164,23 @@ export async function chatCompletion(
     throw new Error(`No API key configured for provider "${provider}" (model: ${model})`)
   }
 
-  // Anthropic uses a different API shape
+  // Anthropic uses a different API shape — no tool support in this path
   if (provider === 'anthropic') {
     return anthropicChatCompletion(model, messages, temperature, apiKey)
   }
 
-  // OpenAI-compatible API (Groq, NIM, OpenAI)
+  // OpenAI-compatible API (Groq, NIM, OpenAI) — with tool support
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const body: Record<string, unknown> = { model, messages, temperature }
+    if (tools && tools.length > 0) body.tools = tools
+
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({ model, messages, temperature }),
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(55000),
     })
 
@@ -188,12 +195,20 @@ export async function chatCompletion(
 
     const data = await res.json()
     const choice = data.choices?.[0]
+    const msg = choice?.message
 
-    return {
-      content: choice?.message?.content || '',
+    const result: LLMResult = {
+      content: msg?.content || '',
       tokensIn: data.usage?.prompt_tokens || 0,
       tokensOut: data.usage?.completion_tokens || 0,
     }
+
+    // Include tool calls if present
+    if (msg?.tool_calls && msg.tool_calls.length > 0) {
+      result.toolCalls = msg.tool_calls
+    }
+
+    return result
   }
 
   throw new Error(`LLM API (${provider}): max retries exceeded`)

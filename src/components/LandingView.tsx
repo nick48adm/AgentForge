@@ -91,11 +91,11 @@ const AnimatedTerminal = memo(function AnimatedTerminal() {
             key={i}
             className="terminal-line-enter"
           >
-            {line.startsWith('$') ? (
+            {typeof line === 'string' && line.startsWith('$') ? (
               <span className="text-emerald-400">{line}</span>
-            ) : line.startsWith('✓') ? (
+            ) : typeof line === 'string' && line.startsWith('✓') ? (
               <span className="text-sky-400">{line}</span>
-            ) : line.startsWith('⠋') ? (
+            ) : typeof line === 'string' && line.startsWith('⠋') ? (
               <span className="text-amber-400">{line}</span>
             ) : (
               <span className="text-white/50">{line}</span>

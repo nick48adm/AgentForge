@@ -3,8 +3,17 @@ import CredentialsProvider from 'next-auth/providers/credentials'
 import { db } from './db'
 import { verifyPassword, isLegacyPlaintext, hashPassword } from './crypto'
 
-if (!process.env.NEXTAUTH_SECRET) {
-  throw new Error('NEXTAUTH_SECRET environment variable is not set. Generate one with: openssl rand -hex 32')
+// Validate NEXTAUTH_SECRET lazily — don't crash during build when env vars are absent
+let _secretWarned = false
+function getNextAuthSecret(): string {
+  if (!process.env.NEXTAUTH_SECRET) {
+    if (!_secretWarned) {
+      console.warn('NEXTAUTH_SECRET environment variable is not set. Generate one with: openssl rand -hex 32')
+      _secretWarned = true
+    }
+    return 'build-time-placeholder'
+  }
+  return process.env.NEXTAUTH_SECRET
 }
 
 // Extend NextAuth types for custom user properties
@@ -90,5 +99,5 @@ export const authOptions: NextAuthOptions = {
     },
   },
   pages: { signIn: '/login' },
-  secret: process.env.NEXTAUTH_SECRET,
+  secret: getNextAuthSecret(),
 }

@@ -24,7 +24,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
     await db.agent.update({ where: { id }, data: { status: 'stopped', containerId: null, sandboxUrl: null } })
     return NextResponse.json({ success: true, message: 'Agent stopped and container removed' })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Unknown error" }, { status: 500 })
   }
 }

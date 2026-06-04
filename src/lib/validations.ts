@@ -39,7 +39,7 @@ export const updateAgentSchema = z.object({
 export const chatSchema = z.object({
   agentId: z.string().min(1, 'agentId is required'),
   message: z.string().min(1, 'message is required').max(10000, 'Message too long').trim(),
-  conversationId: z.string().optional(),
+  conversationId: z.string().nullable().optional(),
 })
 
 export const knowledgeSchema = z.object({
@@ -51,6 +51,6 @@ export const knowledgeSchema = z.object({
 
 export const widgetChatSchema = z.object({
   message: z.string().min(1, 'message is required').max(10000).trim(),
-  conversationId: z.string().optional(),
+  conversationId: z.string().nullable().optional(),
   userId: z.string().max(200).optional(),
 })

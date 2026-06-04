@@ -51,7 +51,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ age
     }
 
     return NextResponse.json({ ok: true })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[discord-webhook]', error)
     return NextResponse.json({ type: 4, data: { content: 'An error occurred.' } })
   }
