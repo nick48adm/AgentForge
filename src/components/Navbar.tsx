@@ -93,7 +93,7 @@ export function Navbar() {
             </DropdownMenuItem>
             <DropdownMenuItem disabled>
               <Settings className="h-3.5 w-3.5 mr-2" />
-              <span className="text-xs">{user?.plan?.charAt(0).toUpperCase()}{user?.plan?.slice(1)} Plan</span>
+              <span className="text-xs">Settings</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleSignOut} className="text-red-500">
