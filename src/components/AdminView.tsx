@@ -258,9 +258,8 @@ export function AdminView() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="draft">Draft</SelectItem>
-                            <SelectItem value="published">Published</SelectItem>
                             <SelectItem value="stopped">Stopped</SelectItem>
-                            <SelectItem value="suspended">Suspended</SelectItem>
+                            <SelectItem value="failed">Failed</SelectItem>
                           </SelectContent>
                         </Select>
                       </TableCell>

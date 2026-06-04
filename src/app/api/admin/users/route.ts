@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAdmin } from '@/lib/session'
-import { adminLimit } from '@/lib/rate-limit'
 
 export async function GET(req: NextRequest) {
   const auth = await requireAdmin()

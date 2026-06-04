@@ -71,8 +71,7 @@ interface ChatMessage {
 
 const AVAILABLE_TOOLS = [
   { id: 'web_search', name: 'Web Search', icon: Globe, description: 'Search the internet for information' },
-  { id: 'calendar', name: 'Calendar', icon: Settings, description: 'Access calendar events' },
-  { id: 'webhook', name: 'Custom Webhook', icon: Webhook, description: 'Send data to external APIs' },
+  { id: 'webhook', name: 'Custom Webhook', icon: Webhook, description: 'Send data to external APIs via HTTP' },
 ]
 
 export function BuilderView() {

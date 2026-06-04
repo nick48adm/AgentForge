@@ -3,6 +3,7 @@
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { signOut } from 'next-auth/react'
+import Link from 'next/link'
 import {
   Bot,
   Shield,
@@ -91,9 +92,11 @@ export function Navbar() {
               <User className="h-3.5 w-3.5 mr-2" />
               <span className="text-xs">{user?.email}</span>
             </DropdownMenuItem>
-            <DropdownMenuItem disabled>
-              <Settings className="h-3.5 w-3.5 mr-2" />
-              <span className="text-xs">Settings</span>
+            <DropdownMenuItem asChild>
+              <Link href="/settings" className="cursor-pointer">
+                <Settings className="h-3.5 w-3.5 mr-2" />
+                <span className="text-xs">Settings</span>
+              </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleSignOut} className="text-red-500">

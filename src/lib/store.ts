@@ -20,8 +20,6 @@ interface AppStore {
   setIsAuthenticated: (val: boolean) => void
   user: UserInfo | null
   setUser: (user: UserInfo | null) => void
-  sidebarOpen: boolean
-  setSidebarOpen: (open: boolean) => void
 }
 
 export const useAppStore = create<AppStore>((set) => ({
@@ -33,6 +31,4 @@ export const useAppStore = create<AppStore>((set) => ({
   setIsAuthenticated: (val) => set({ isAuthenticated: val }),
   user: null,
   setUser: (user) => set({ user }),
-  sidebarOpen: true,
-  setSidebarOpen: (open) => set({ sidebarOpen: open }),
 }))

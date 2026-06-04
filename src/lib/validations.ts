@@ -49,26 +49,8 @@ export const knowledgeSchema = z.object({
   content: z.string().min(1, 'content is required').max(500_000, 'File content too large (max 500KB)'),
 })
 
-export const telegramConnectSchema = z.object({
-  agentId: z.string().min(1, 'agentId is required'),
-  botToken: z.string().min(1, 'botToken is required').max(200),
-})
-
-export const telegramDisconnectSchema = z.object({
-  agentId: z.string().min(1, 'agentId is required'),
-})
-
 export const widgetChatSchema = z.object({
   message: z.string().min(1, 'message is required').max(10000).trim(),
   conversationId: z.string().optional(),
   userId: z.string().max(200).optional(),
-})
-
-export const adminUserUpdateSchema = z.object({
-  plan: z.enum(['free', 'pro', 'enterprise']).optional(),
-  role: z.enum(['user', 'admin']).optional(),
-})
-
-export const adminAgentUpdateSchema = z.object({
-  status: z.enum(['draft', 'stopped']).optional(),
 })

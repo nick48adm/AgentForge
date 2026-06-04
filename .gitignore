@@ -5,3 +5,4 @@ dev.log
 .antigravitycli/
 worklog.md
 mini-services/
+tsconfig.tsbuildinfo

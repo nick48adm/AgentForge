@@ -44,14 +44,28 @@ const MODEL_COSTS: Record<string, { inputPer1K: number; outputPer1K: number }> =
   'deepseek-ai/deepseek-v4-flash': { inputPer1K: 0.0001, outputPer1K: 0.0004 },
 }
 
-function calculateCost(model: string, tokensIn: number, tokensOut: number): number {
+export function calculateCost(model: string, tokensIn: number, tokensOut: number): number {
   const costs = MODEL_COSTS[model] || MODEL_COSTS['llama-3.3-70b-versatile']!
   return (tokensIn / 1000) * costs.inputPer1K + (tokensOut / 1000) * costs.outputPer1K
 }
 
 export async function routeChannelMessage(msg: ChannelMessage): Promise<ChannelResponse> {
-  const agent = await db.agent.findUnique({ where: { id: msg.agentId } })
+  const agent = await db.agent.findUnique({
+    where: { id: msg.agentId },
+    include: { knowledgeBases: { select: { fileName: true, content: true } } },
+  })
   if (!agent) throw new Error('Agent not found')
+
+  // Build knowledge base context for system prompt
+  let knowledgeContext = ''
+  if (agent.knowledgeBases && agent.knowledgeBases.length > 0) {
+    const knowledgeSections = agent.knowledgeBases.map((kb) => {
+      const maxLen = 4000
+      const truncated = kb.content.length > maxLen ? kb.content.slice(0, maxLen) + '\n[...truncated]' : kb.content
+      return `--- ${kb.fileName} ---\n${truncated}`
+    })
+    knowledgeContext = `\n\n<knowledge-base>\n${knowledgeSections.join('\n\n')}\n</knowledge-base>\n\nWhen answering questions, reference the knowledge base above when relevant. If the answer is in the knowledge base, use that information preferentially.`
+  }
 
   let content: string
   let tokensIn = 0
@@ -70,13 +84,13 @@ export async function routeChannelMessage(msg: ChannelMessage): Promise<ChannelR
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : 'Unknown error'
       console.error(`[${msg.channel}] sandbox error:`, message)
-      const result = await directLLM(agent, msg.text)
+      const result = await directLLM(agent, msg.text, knowledgeContext)
       content = result.content
       tokensIn = result.tokensIn
       tokensOut = result.tokensOut
     }
   } else {
-    const result = await directLLM(agent, msg.text)
+    const result = await directLLM(agent, msg.text, knowledgeContext)
     content = result.content
     tokensIn = result.tokensIn
     tokensOut = result.tokensOut
@@ -91,10 +105,12 @@ export async function routeChannelMessage(msg: ChannelMessage): Promise<ChannelR
   return { content, tokensIn, tokensOut }
 }
 
-async function directLLM(agent: Agent, text: string): Promise<{ content: string; tokensIn: number; tokensOut: number }> {
+async function directLLM(agent: Agent, text: string, knowledgeContext: string = ''): Promise<{ content: string; tokensIn: number; tokensOut: number }> {
   try {
     const messages: LLMMessage[] = []
-    if (agent.systemPrompt) messages.push({ role: 'system', content: agent.systemPrompt })
+    if (agent.systemPrompt || knowledgeContext) {
+      messages.push({ role: 'system', content: (agent.systemPrompt || '') + knowledgeContext })
+    }
     messages.push({ role: 'user', content: text })
     const result = await chatCompletion(agent.model, messages, agent.temperature)
     return {

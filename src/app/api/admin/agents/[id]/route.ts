@@ -12,7 +12,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const body = await req.json()
     const updateData: any = {}
     // Admin can only toggle plan/status
-    if (body.status !== undefined && ['draft','stopped'].includes(body.status)) updateData.status = body.status
+    if (body.status !== undefined && ['draft','stopped','failed'].includes(body.status)) updateData.status = body.status
     if (body.plan !== undefined && ['free','pro','enterprise'].includes(body.plan)) updateData.plan = body.plan
 
     const agent = await db.agent.update({ where: { id }, data: updateData })

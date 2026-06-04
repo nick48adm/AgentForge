@@ -3,30 +3,9 @@ import { db } from '@/lib/db'
 import { requireAuth } from '@/lib/session'
 import { proxyChatToSandbox } from '@/lib/sandbox'
 import { chatLimit } from '@/lib/rate-limit'
-import { chatCompletion, type LLMMessage, getProviderForModel } from '@/lib/llm'
+import { chatCompletion, type LLMMessage } from '@/lib/llm'
 import { chatSchema } from '@/lib/validations'
-
-/**
- * Model-specific cost multipliers (USD per 1K tokens).
- * These are approximate and should be updated as providers change pricing.
- */
-const MODEL_COSTS: Record<string, { inputPer1K: number; outputPer1K: number }> = {
-  'llama-3.3-70b-versatile': { inputPer1K: 0.00003, outputPer1K: 0.00006 },
-  'mixtral-8x7b-32768': { inputPer1K: 0.00003, outputPer1K: 0.00006 },
-  'gpt-4o': { inputPer1K: 0.0025, outputPer1K: 0.01 },
-  'gpt-4o-mini': { inputPer1K: 0.00015, outputPer1K: 0.0006 },
-  'o4-mini': { inputPer1K: 0.0015, outputPer1K: 0.006 },
-  'claude-sonnet-4-5': { inputPer1K: 0.003, outputPer1K: 0.015 },
-  'claude-opus-4-5': { inputPer1K: 0.015, outputPer1K: 0.075 },
-  'moonshotai/kimi-k2.6': { inputPer1K: 0.0006, outputPer1K: 0.002 },
-  'deepseek-ai/deepseek-v4-pro': { inputPer1K: 0.0006, outputPer1K: 0.002 },
-  'deepseek-ai/deepseek-v4-flash': { inputPer1K: 0.0001, outputPer1K: 0.0004 },
-}
-
-function calculateCost(model: string, tokensIn: number, tokensOut: number): number {
-  const costs = MODEL_COSTS[model] || MODEL_COSTS['llama-3.3-70b-versatile']!
-  return (tokensIn / 1000) * costs.inputPer1K + (tokensOut / 1000) * costs.outputPer1K
-}
+import { calculateCost } from '@/lib/channel-chat'
 
 export async function POST(req: NextRequest) {
   const auth = await requireAuth()
@@ -52,7 +31,10 @@ export async function POST(req: NextRequest) {
     }
     const { agentId, message, conversationId } = parsed.data
 
-    const agent = await db.agent.findUnique({ where: { id: agentId } })
+    const agent = await db.agent.findUnique({
+      where: { id: agentId },
+      include: { knowledgeBases: { select: { fileName: true, content: true } } },
+    })
     if (!agent) return NextResponse.json({ error: 'Agent not found' }, { status: 404 })
 
     if (agent.userId !== auth.user.id && agent.status !== 'published') {
@@ -73,6 +55,18 @@ export async function POST(req: NextRequest) {
     const messages: Array<Record<string, unknown>> = Array.isArray(conversation.messages) ? (conversation.messages as Array<Record<string, unknown>>) : []
     messages.push({ role: 'user', content: message, timestamp: new Date().toISOString() })
 
+    // Build knowledge base context for system prompt
+    let knowledgeContext = ''
+    if (agent.knowledgeBases && agent.knowledgeBases.length > 0) {
+      const knowledgeSections = agent.knowledgeBases.map((kb, i) => {
+        // Truncate individual knowledge entries to 4000 chars to prevent prompt overflow
+        const maxLen = 4000
+        const truncated = kb.content.length > maxLen ? kb.content.slice(0, maxLen) + '\n[...truncated]' : kb.content
+        return `--- ${kb.fileName} ---\n${truncated}`
+      })
+      knowledgeContext = `\n\n<knowledge-base>\n${knowledgeSections.join('\n\n')}\n</knowledge-base>\n\nWhen answering questions, reference the knowledge base above when relevant. If the answer is in the knowledge base, use that information preferentially.`
+    }
+
     let assistantContent: string
     let tokensIn = 0
     let tokensOut = 0
@@ -91,14 +85,14 @@ export async function POST(req: NextRequest) {
       } catch (e: unknown) {
         const errMsg = e instanceof Error ? e.message : 'Unknown error'
         console.error('[chat] sandbox error, falling back:', errMsg)
-        const result = await directLLM(agent, messages)
+        const result = await directLLM(agent.systemPrompt, agent.model, agent.temperature, messages, knowledgeContext)
         assistantContent = result.content
         tokensIn = result.tokensIn
         tokensOut = result.tokensOut
       }
     } else {
       // Draft / preview
-      const result = await directLLM(agent, messages)
+      const result = await directLLM(agent.systemPrompt, agent.model, agent.temperature, messages, knowledgeContext)
       assistantContent = result.content
       tokensIn = result.tokensIn
       tokensOut = result.tokensOut
@@ -122,16 +116,24 @@ export async function POST(req: NextRequest) {
 }
 
 
-async function directLLM(agent: { systemPrompt: string; model: string; temperature: number }, messages: Array<Record<string, unknown>>): Promise<{ content: string; tokensIn: number; tokensOut: number }> {
+async function directLLM(
+  systemPrompt: string,
+  model: string,
+  temperature: number,
+  messages: Array<Record<string, unknown>>,
+  knowledgeContext: string,
+): Promise<{ content: string; tokensIn: number; tokensOut: number }> {
   try {
     const llmMessages: LLMMessage[] = []
-    if (agent.systemPrompt) llmMessages.push({ role: 'system', content: agent.systemPrompt })
+    if (systemPrompt || knowledgeContext) {
+      llmMessages.push({ role: 'system', content: (systemPrompt || '') + knowledgeContext })
+    }
     for (const m of messages.slice(-20)) {
       const role = String(m.role ?? '')
       const content = String(m.content ?? '')
       if (role === 'user' || role === 'assistant') llmMessages.push({ role, content })
     }
-    const result = await chatCompletion(agent.model, llmMessages, agent.temperature)
+    const result = await chatCompletion(model, llmMessages, temperature)
     return {
       content: result.content || 'Unable to generate a response.',
       tokensIn: result.tokensIn,

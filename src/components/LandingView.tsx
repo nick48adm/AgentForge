@@ -1,11 +1,8 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react'
-import { signIn } from 'next-auth/react'
-import { useAppStore } from '@/lib/store'
+import { useState, useEffect, useRef, useMemo, memo } from 'react'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import {
   Bot,
   ArrowRight,
@@ -59,7 +56,7 @@ const AnimatedTerminal = memo(function AnimatedTerminal() {
     '$ agentforge config --model gpt-4o --temp 0.7',
     '✓ Model configured',
     '$ agentforge knowledge add ./docs/',
-    '✓ 47 documents indexed (vector DB)',
+    '✓ 47 documents indexed',
     '$ agentforge deploy --sandbox',
     '⠋ Provisioning isolated container...',
     '✓ Agent live at agent-f8k2.agentforge.run',
@@ -132,14 +129,6 @@ const TELEGRAM_STEPS = [
 
 /* ─── Main Landing View ─── */
 export function LandingView() {
-  const { setUser, setIsAuthenticated, setView } = useAppStore()
-  const [loginMode, setLoginMode] = useState<'login' | 'register'>('login')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [name, setName] = useState('')
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(false)
-
   /* Parallax via ref — no state, no re-renders */
   const scrollRef = useRef(0)
   const orbsRef = useRef<HTMLDivElement[]>([])
@@ -172,107 +161,6 @@ export function LandingView() {
   const arch = useReveal(0.1)
   const telegram = useReveal(0.1)
   const cta = useReveal(0.1)
-
-  const handleSubmit = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError('')
-    setLoading(true)
-
-    try {
-      if (loginMode === 'register') {
-        const res = await fetch('/api/auth/register', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password, name }),
-        })
-        const data = await res.json()
-        if (!res.ok) {
-          setError(data.error)
-          setLoading(false)
-          return
-        }
-      }
-
-      const result = await signIn('credentials', { email, password, redirect: false })
-      if (result?.error) {
-        setError('Invalid email or password')
-        setLoading(false)
-        return
-      }
-
-      const sessionRes = await fetch('/api/auth/session')
-      const session = await sessionRes.json()
-      if (sessionRes.ok && session?.user) {
-        setUser({
-          id: session.user.id,
-          name: session.user.name || '',
-          email: session.user.email || '',
-          role: session.user.role || 'user',
-          plan: session.user.plan || 'free',
-        })
-        setIsAuthenticated(true)
-        setView('dashboard')
-      } else {
-        setError('Login failed — please try again')
-      }
-    } catch (err: any) {
-      setError('Something went wrong. Please try again.')
-    }
-    setLoading(false)
-  }, [loginMode, email, password, name, setUser, setIsAuthenticated, setView])
-
-  /* Auth dialog — stable, no inline closure recreation */
-  const AuthForm = useMemo(() => (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      {loginMode === 'register' && (
-        <div>
-          <Input
-            placeholder="Full Name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="bg-white/5 border-white/10 focus:border-white/20"
-          />
-        </div>
-      )}
-      <Input
-        type="email"
-        placeholder="Email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        required
-        className="bg-white/5 border-white/10 focus:border-white/20"
-      />
-      <Input
-        type="password"
-        placeholder="Password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        required
-        className="bg-white/5 border-white/10 focus:border-white/20"
-      />
-      {error && <p className="text-sm text-red-400">{error}</p>}
-      <Button
-        type="submit"
-        className="w-full bg-white text-black hover:bg-white/90 font-medium"
-        disabled={loading}
-      >
-        {loading ? 'Loading...' : loginMode === 'login' ? 'Sign In' : 'Create Account'}
-      </Button>
-      <p className="text-xs text-center text-white/40">
-        {loginMode === 'login' ? "Don't have an account? " : 'Already have an account? '}
-        <button
-          type="button"
-          className="text-white/70 underline underline-offset-2 hover:text-white transition-colors"
-          onClick={() => {
-            setLoginMode(loginMode === 'login' ? 'register' : 'login')
-            setError('')
-          }}
-        >
-          {loginMode === 'login' ? 'Sign up' : 'Sign in'}
-        </button>
-      </p>
-    </form>
-  ), [handleSubmit, loginMode, name, email, password, error, loading])
 
   return (
     <div className="min-h-screen flex flex-col bg-[#050508] text-white overflow-x-hidden landing-page">
@@ -310,8 +198,8 @@ export function LandingView() {
             <a href="#deploy" className="hover:text-white transition-colors">Deploy</a>
           </nav>
 
-          <Dialog>
-            <DialogTrigger asChild>
+          <div className="flex items-center gap-3">
+            <Link href="/login">
               <Button
                 variant="outline"
                 size="sm"
@@ -319,21 +207,16 @@ export function LandingView() {
               >
                 Sign In
               </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-md bg-[#0c0c14] border-white/10">
-              <DialogHeader>
-                <DialogTitle className="text-white">
-                  {loginMode === 'login' ? 'Welcome back' : 'Create account'}
-                </DialogTitle>
-                <DialogDescription className="text-white/40">
-                  {loginMode === 'login'
-                    ? 'Sign in to your AgentForge account'
-                    : 'Create your free account to start building agents'}
-                </DialogDescription>
-              </DialogHeader>
-              {AuthForm}
-            </DialogContent>
-          </Dialog>
+            </Link>
+            <Link href="/signup">
+              <Button
+                size="sm"
+                className="text-xs h-9 bg-white text-black hover:bg-white/90 font-medium"
+              >
+                Get Started
+              </Button>
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -381,30 +264,15 @@ export function LandingView() {
 
             {/* CTA */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 hero-cta-enter">
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button
-                    size="lg"
-                    className="bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-400 hover:to-cyan-400 text-white px-8 h-12 text-sm font-medium shadow-lg shadow-indigo-500/25 transition-shadow hover:shadow-indigo-500/40 active:scale-[0.98]"
-                  >
-                    Get Started
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-md bg-[#0c0c14] border-white/10">
-                  <DialogHeader>
-                    <DialogTitle className="text-white">
-                      {loginMode === 'login' ? 'Welcome back' : 'Create account'}
-                    </DialogTitle>
-                    <DialogDescription className="text-white/40">
-                      {loginMode === 'login'
-                        ? 'Sign in to your AgentForge account'
-                        : 'Create your free account to start building agents'}
-                    </DialogDescription>
-                  </DialogHeader>
-                  {AuthForm}
-                </DialogContent>
-              </Dialog>
+              <Link href="/signup">
+                <Button
+                  size="lg"
+                  className="bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-400 hover:to-cyan-400 text-white px-8 h-12 text-sm font-medium shadow-lg shadow-indigo-500/25 transition-shadow hover:shadow-indigo-500/40 active:scale-[0.98]"
+                >
+                  Get Started
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </Link>
 
               <a
                 href="#architecture"
@@ -607,30 +475,15 @@ export function LandingView() {
               Stop paying per API call to platforms you don&apos;t control.
               Self-host your own agent infrastructure.
             </p>
-            <Dialog>
-              <DialogTrigger asChild>
-                <Button
-                  size="lg"
-                  className="bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-400 hover:to-cyan-400 text-white px-10 h-12 text-sm font-medium shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 transition-shadow active:scale-[0.98]"
-                >
-                  Start Building
-                  <ArrowRight className="ml-2 h-4 w-4" />
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-md bg-[#0c0c14] border-white/10">
-                <DialogHeader>
-                  <DialogTitle className="text-white">
-                    {loginMode === 'login' ? 'Welcome back' : 'Create account'}
-                  </DialogTitle>
-                  <DialogDescription className="text-white/40">
-                    {loginMode === 'login'
-                      ? 'Sign in to your AgentForge account'
-                      : 'Create your free account to start building agents'}
-                  </DialogDescription>
-                </DialogHeader>
-                {AuthForm}
-              </DialogContent>
-            </Dialog>
+            <Link href="/signup">
+              <Button
+                size="lg"
+                className="bg-gradient-to-r from-indigo-500 to-cyan-500 hover:from-indigo-400 hover:to-cyan-400 text-white px-10 h-12 text-sm font-medium shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 transition-shadow active:scale-[0.98]"
+              >
+                Start Building
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
           </div>
         </div>
       </section>

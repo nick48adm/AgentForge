@@ -9,21 +9,17 @@ export default withAuth(
     callbacks: {
       authorized({ token, req }) {
         const path = req.nextUrl.pathname
-        const publicPaths = [
-          '/api/auth',
-          '/api/telegram/webhook',
-          '/api/channels/widget',   // widget script + widget chat — public
-          '/api/channels/whatsapp/webhook',
-          '/api/channels/discord/webhook',
-        ]
-        if (publicPaths.some(p => path.startsWith(p))) return true
+        // Public auth pages
+        if (path === '/login' || path === '/signup') return true
+        // Settings requires auth
+        if (path.startsWith('/settings')) return !!token
         return !!token
       },
     },
-    pages: { signIn: '/' },
+    pages: { signIn: '/login' },
   }
 )
 
 export const config = {
-  matcher: ['/api/admin/:path*'],
+  matcher: ['/settings/:path*'],
 }

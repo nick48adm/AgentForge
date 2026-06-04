@@ -4,7 +4,7 @@
  * Uses PBKDF2 with SHA-256, 100k iterations — strong enough for production.
  */
 
-import { createHash, randomBytes, pbkdf2 } from 'crypto'
+import { randomBytes, pbkdf2 } from 'crypto'
 import { promisify } from 'util'
 
 const pbkdf2Async = promisify(pbkdf2)
