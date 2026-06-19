@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAdmin } from '@/lib/session'
-import { adminLimit } from '@/lib/rate-limit'
 
 export async function GET(req: NextRequest) {
   const auth = await requireAdmin()
@@ -17,7 +16,7 @@ export async function GET(req: NextRequest) {
       },
     })
     return NextResponse.json(users)
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Unknown error" }, { status: 500 })
   }
 }

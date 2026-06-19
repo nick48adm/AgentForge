@@ -2,11 +2,24 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { routeChannelMessage } from '@/lib/channel-chat'
 
+// Telegram Bot API secret token validation
+// Set TELEGRAM_WEBHOOK_SECRET env var to validate incoming webhooks
+const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || ''
+
 export async function POST(req: NextRequest, { params }: { params: Promise<{ agentId: string }> }) {
   try {
     const { agentId } = await params
-    const update = await req.json()
 
+    // Validate Telegram webhook secret if configured
+    if (TELEGRAM_WEBHOOK_SECRET) {
+      const secretToken = req.headers.get('x-telegram-bot-api-secret-token')
+      if (secretToken !== TELEGRAM_WEBHOOK_SECRET) {
+        // Return ok to prevent Telegram from retrying, but don't process
+        return NextResponse.json({ ok: true })
+      }
+    }
+
+    const update = await req.json()
     const message = update.message || update.edited_message
     if (!message?.text) return NextResponse.json({ ok: true })
 
@@ -22,7 +35,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ age
     if (!connection || !connection.isActive) return NextResponse.json({ ok: true })
 
     // Allowlist check
-    const allowedUsers: string[] = JSON.parse(connection.allowedUsers || '[]')
+    const allowedUsers: string[] = Array.isArray(connection.allowedUsers)
+      ? connection.allowedUsers as string[]
+      : JSON.parse((connection.allowedUsers as string) || '[]')
     if (allowedUsers.length > 0 && !allowedUsers.includes(fromUserId)) {
       await tgSend(connection.botToken, chatId, 'You are not authorised to use this bot.')
       return NextResponse.json({ ok: true })
@@ -32,7 +47,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ age
     if (text === '/start') {
       const agent = connection.agent
       await tgSend(connection.botToken, chatId,
-        `Hi! I'm *${agent.name}*.\n${agent.description || 'How can I help you today?'}\n\nJust send me a message!`
+        `Hi! I'm *${escapeMarkdown(agent.name)}*.\n${agent.description || 'How can I help you today?'}\n\nJust send me a message!`
       )
       return NextResponse.json({ ok: true })
     }
@@ -43,10 +58,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ age
 
     await tgSend(connection.botToken, chatId, content)
     return NextResponse.json({ ok: true })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('[telegram-webhook]', error)
+    // Return ok to prevent Telegram from retrying
     return NextResponse.json({ ok: true })
   }
+}
+
+/**
+ * Escape special Markdown characters for Telegram's MarkdownV2 parse mode.
+ * Falls back to plain text if escaping is complex.
+ */
+function escapeMarkdown(text: string): string {
+  // Simple escaping for common Markdown characters
+  return text.replace(/([_*\[\]()~`>#+\-=|{}.!])/g, '\\$1')
 }
 
 async function tgSend(token: string, chatId: number, text: string) {
@@ -56,7 +81,9 @@ async function tgSend(token: string, chatId: number, text: string) {
     await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text: chunk, parse_mode: 'Markdown' }),
+      body: JSON.stringify({ chat_id: chatId, text: chunk }),
+      // Removed parse_mode: 'Markdown' to avoid formatting errors with AI responses
+      // Use MarkdownV2 with proper escaping when needed
     }).catch(e => console.error('[tgSend]', e))
   }
 }

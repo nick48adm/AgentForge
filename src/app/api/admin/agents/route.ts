@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
       },
     })
     return NextResponse.json(agents)
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Unknown error" }, { status: 500 })
   }
 }

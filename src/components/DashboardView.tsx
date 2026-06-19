@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useAppStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,7 +19,6 @@ import {
   Plus,
   MessageSquare,
   Zap,
-  TrendingUp,
   MoreVertical,
   Pencil,
   Play,
@@ -27,7 +26,6 @@ import {
   Trash2,
   Send,
   Loader2,
-  ExternalLink,
 } from 'lucide-react'
 import {
   DropdownMenu,
@@ -51,12 +49,17 @@ interface Agent {
 }
 
 interface UsageData {
-  totalTokensIn: number
-  totalTokensOut: number
-  totalCost: number
-  agentCount: number
-  publishedCount: number
-  conversationCount: number
+  summary: {
+    totalTokensIn: number
+    totalTokensOut: number
+    totalCost: number
+    agentCount: number
+    publishedCount: number
+    conversationCount: number
+    totalMessages: number
+  }
+  dailyUsage: Record<string, { tokensIn: number; tokensOut: number; cost: number; count: number }>
+  recentUsage: Array<Record<string, unknown>>
 }
 
 export function DashboardView() {
@@ -67,32 +70,42 @@ export function DashboardView() {
   const [createOpen, setCreateOpen] = useState(false)
   const [newAgentName, setNewAgentName] = useState('')
   const [creating, setCreating] = useState(false)
+  const deployPollRef = useRef<NodeJS.Timeout | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (deployPollRef.current) {
+        clearInterval(deployPollRef.current)
+        deployPollRef.current = null
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (!user?.id) return
-    const uid = user.id
     const load = async () => {
       try {
         const [agentsRes, usageRes] = await Promise.all([
-          fetch('/api/agents', { headers: { 'x-user-id': uid } }),
-          fetch('/api/usage', { headers: { 'x-user-id': uid } }),
+          fetch('/api/agents'),
+          fetch('/api/usage'),
         ])
         if (agentsRes.ok) setAgents(await agentsRes.json())
         if (usageRes.ok) setUsage(await usageRes.json())
-      } catch {}
+      } catch (err) {
+        console.error('[dashboard] Failed to load data:', err)
+      }
       setLoading(false)
     }
     load()
   }, [user?.id])
 
   const fetchAgents = async () => {
-    if (!user?.id) return
     try {
-      const res = await fetch('/api/agents', {
-        headers: { 'x-user-id': user.id },
-      })
+      const res = await fetch('/api/agents')
       if (res.ok) setAgents(await res.json())
-    } catch {}
+    } catch (err) {
+      console.error('[dashboard] Failed to fetch agents:', err)
+    }
   }
 
   const handleCreateAgent = async () => {
@@ -101,10 +114,7 @@ export function DashboardView() {
     try {
       const res = await fetch('/api/agents', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': user?.id || '',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newAgentName }),
       })
       if (res.ok) {
@@ -114,111 +124,127 @@ export function DashboardView() {
         setSelectedAgentId(agent.id)
         setView('builder')
       }
-    } catch {}
+    } catch (err) {
+      console.error('[dashboard] Failed to create agent:', err)
+    }
     setCreating(false)
   }
 
   const handleDeleteAgent = async (id: string) => {
     try {
-      await fetch(`/api/agents/${id}`, {
-        method: 'DELETE',
-        headers: { 'x-user-id': user?.id || '' },
-      })
+      await fetch(`/api/agents/${id}`, { method: 'DELETE' })
       fetchAgents()
-    } catch {}
+    } catch (err) {
+      console.error('[dashboard] Failed to delete agent:', err)
+    }
+  }
+
+  const startDeployPoll = () => {
+    if (deployPollRef.current) return
+    deployPollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch('/api/agents')
+        if (res.ok) {
+          const data: Agent[] = await res.json()
+          setAgents(data)
+          const hasDeploying = data.some(a => a.status === 'deploying')
+          if (!hasDeploying && deployPollRef.current) {
+            clearInterval(deployPollRef.current)
+            deployPollRef.current = null
+          }
+        }
+      } catch (err) {
+        console.error('[dashboard] Deploy poll error:', err)
+      }
+    }, 2000)
   }
 
   const handleDeployAgent = async (id: string) => {
     try {
-      await fetch(`/api/agents/${id}/deploy`, {
-        method: 'POST',
-        headers: { 'x-user-id': user?.id || '' },
-      })
-      fetchAgents()
-    } catch {}
+      const res = await fetch(`/api/agents/${id}/deploy`, { method: 'POST' })
+      if (res.ok) {
+        fetchAgents()
+        startDeployPoll()
+      }
+    } catch (err) {
+      console.error('[dashboard] Failed to deploy agent:', err)
+    }
   }
 
   const handleStopAgent = async (id: string) => {
     try {
-      await fetch(`/api/agents/${id}/stop`, {
-        method: 'POST',
-        headers: { 'x-user-id': user?.id || '' },
-      })
+      await fetch(`/api/agents/${id}/stop`, { method: 'POST' })
       fetchAgents()
-    } catch {}
+    } catch (err) {
+      console.error('[dashboard] Failed to stop agent:', err)
+    }
   }
 
-  const statusColors: Record<string, string> = {
-    draft: 'bg-slate-500/10 text-slate-500',
-    deploying: 'bg-amber-500/10 text-amber-500',
-    published: 'bg-emerald-500/10 text-emerald-500',
-    stopped: 'bg-red-500/10 text-red-500',
-  }
+  const statusStyles = useMemo<Record<string, string>>(() => ({
+    draft: 'bg-muted text-muted-foreground',
+    deploying: 'bg-foreground/10 text-foreground',
+    published: 'bg-foreground text-background',
+    stopped: 'bg-red-500/10 text-red-400',
+  }), [])
 
-  const statusIcons: Record<string, any> = {
+  const statusIcons = useMemo<Record<string, typeof Pencil>>(() => ({
     draft: Pencil,
     deploying: Loader2,
     published: Play,
     stopped: Square,
-  }
+  }), [])
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-[60vh]">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
       </div>
     )
   }
 
   return (
-    <div className="container mx-auto px-4 md:px-6 py-8 max-w-6xl">
+    <div className="container mx-auto px-4 md:px-6 py-8 max-w-5xl">
       {/* Welcome */}
       <div className="mb-8">
-        <h1 className="text-2xl md:text-3xl font-bold">
-          Welcome back, {user?.name || 'User'}
+        <h1 className="text-xl font-semibold tracking-tight">
+          {user?.name || 'Dashboard'}
         </h1>
-        <p className="text-muted-foreground mt-1">
+        <p className="text-sm text-muted-foreground mt-0.5">
           Manage your AI agents and monitor usage.
         </p>
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
         {[
           {
             label: 'Agents',
-            value: usage?.agentCount ?? agents.length,
+            value: usage?.summary?.agentCount ?? agents.length,
             icon: Bot,
-            color: 'text-emerald-500',
           },
           {
             label: 'Published',
-            value: usage?.publishedCount ?? 0,
+            value: usage?.summary?.publishedCount ?? 0,
             icon: Play,
-            color: 'text-emerald-500',
           },
           {
             label: 'Conversations',
-            value: usage?.conversationCount ?? 0,
+            value: usage?.summary?.conversationCount ?? 0,
             icon: MessageSquare,
-            color: 'text-cyan-500',
           },
           {
             label: 'Tokens Used',
-            value: ((usage?.totalTokensIn ?? 0) + (usage?.totalTokensOut ?? 0)).toLocaleString(),
+            value: ((usage?.summary?.totalTokensIn ?? 0) + (usage?.summary?.totalTokensOut ?? 0)).toLocaleString(),
             icon: Zap,
-            color: 'text-amber-500',
           },
         ].map((stat, i) => (
           <Card key={i} className="border-border/50">
-            <CardContent className="p-4 md:p-6">
+            <CardContent className="p-4">
               <div className="flex items-center gap-3">
-                <div className={`${stat.color}`}>
-                  <stat.icon className="h-5 w-5" />
-                </div>
+                <stat.icon className="h-4 w-4 text-muted-foreground" />
                 <div>
-                  <div className="text-2xl font-bold">{stat.value}</div>
-                  <div className="text-xs text-muted-foreground">{stat.label}</div>
+                  <div className="text-lg font-semibold tracking-tight">{stat.value}</div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-wider">{stat.label}</div>
                 </div>
               </div>
             </CardContent>
@@ -227,12 +253,12 @@ export function DashboardView() {
       </div>
 
       {/* Agents Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-semibold">My Agents</h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-sm font-semibold">Agents</h2>
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-emerald-600 hover:bg-emerald-700 text-white">
-              <Plus className="h-4 w-4 mr-2" />
+            <Button size="sm" className="bg-foreground text-background hover:bg-foreground/90 h-8 text-xs">
+              <Plus className="h-3 w-3 mr-1.5" />
               New Agent
             </Button>
           </DialogTrigger>
@@ -252,7 +278,7 @@ export function DashboardView() {
               />
               <Button
                 onClick={handleCreateAgent}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                className="w-full bg-foreground text-background hover:bg-foreground/90"
                 disabled={creating || !newAgentName.trim()}
               >
                 {creating ? (
@@ -271,53 +297,53 @@ export function DashboardView() {
       {agents.length === 0 ? (
         <Card className="border-dashed border-2">
           <CardContent className="flex flex-col items-center justify-center py-16">
-            <div className="h-16 w-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center mb-4">
-              <Bot className="h-8 w-8 text-emerald-500" />
+            <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center mb-4">
+              <Bot className="h-5 w-5 text-muted-foreground" />
             </div>
-            <h3 className="text-lg font-semibold mb-2">No agents yet</h3>
-            <p className="text-sm text-muted-foreground mb-6 text-center max-w-sm">
+            <h3 className="text-sm font-semibold mb-1">No agents yet</h3>
+            <p className="text-xs text-muted-foreground mb-6 text-center max-w-sm">
               Create your first AI agent. Configure its personality, tools, and knowledge base,
               then deploy it to a sandboxed environment.
             </p>
             <Button
               onClick={() => setCreateOpen(true)}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              className="bg-foreground text-background hover:bg-foreground/90 h-8 text-xs"
             >
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="h-3 w-3 mr-1.5" />
               Create Your First Agent
             </Button>
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {agents.map((agent) => {
             const StatusIcon = statusIcons[agent.status] || Pencil
             return (
               <Card
                 key={agent.id}
-                className="border-border/50 hover:border-border transition-all hover:shadow-md cursor-pointer group"
+                className="border-border/50 hover:border-border transition-all cursor-pointer group"
                 onClick={() => {
                   setSelectedAgentId(agent.id)
                   setView('builder')
                 }}
               >
-                <CardHeader className="pb-3">
+                <CardHeader className="pb-2 pt-4 px-4">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-600 text-lg">
+                      <div className="h-9 w-9 rounded-md bg-muted flex items-center justify-center text-sm font-semibold text-foreground">
                         {agent.avatar || agent.name.charAt(0).toUpperCase()}
                       </div>
                       <div>
-                        <CardTitle className="text-base">{agent.name}</CardTitle>
-                        <CardDescription className="text-xs">
+                        <CardTitle className="text-sm">{agent.name}</CardTitle>
+                        <CardDescription className="text-[10px] font-mono">
                           {agent.model}
                         </CardDescription>
                       </div>
                     </div>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <MoreVertical className="h-4 w-4" />
+                        <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <MoreVertical className="h-3.5 w-3.5" />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
@@ -328,7 +354,7 @@ export function DashboardView() {
                             setView('builder')
                           }}
                         >
-                          <Pencil className="h-4 w-4 mr-2" />
+                          <Pencil className="h-3.5 w-3.5 mr-2" />
                           Edit
                         </DropdownMenuItem>
                         {agent.status === 'published' ? (
@@ -338,8 +364,13 @@ export function DashboardView() {
                               handleStopAgent(agent.id)
                             }}
                           >
-                            <Square className="h-4 w-4 mr-2" />
+                            <Square className="h-3.5 w-3.5 mr-2" />
                             Stop
+                          </DropdownMenuItem>
+                        ) : agent.status === 'deploying' ? (
+                          <DropdownMenuItem disabled>
+                            <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" />
+                            Deploying...
                           </DropdownMenuItem>
                         ) : (
                           <DropdownMenuItem
@@ -348,42 +379,42 @@ export function DashboardView() {
                               handleDeployAgent(agent.id)
                             }}
                           >
-                            <Play className="h-4 w-4 mr-2" />
+                            <Play className="h-3.5 w-3.5 mr-2" />
                             Deploy
                           </DropdownMenuItem>
                         )}
                         <DropdownMenuItem
-                          className="text-red-600"
+                          className="text-red-500"
                           onClick={(e) => {
                             e.stopPropagation()
                             handleDeleteAgent(agent.id)
                           }}
                         >
-                          <Trash2 className="h-4 w-4 mr-2" />
+                          <Trash2 className="h-3.5 w-3.5 mr-2" />
                           Delete
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
                 </CardHeader>
-                <CardContent>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Badge variant="secondary" className={statusColors[agent.status]}>
-                      <StatusIcon className={`h-3 w-3 mr-1 ${agent.status === 'deploying' ? 'animate-spin' : ''}`} />
+                <CardContent className="px-4 pb-4">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <Badge variant="secondary" className={`text-[10px] h-5 ${statusStyles[agent.status]}`}>
+                      <StatusIcon className={`h-2.5 w-2.5 mr-0.5 ${agent.status === 'deploying' ? 'animate-spin' : ''}`} />
                       {agent.status}
                     </Badge>
                     {agent.telegramConnection?.isActive && (
-                      <Badge variant="secondary" className="bg-sky-500/10 text-sky-500">
-                        <Send className="h-3 w-3 mr-1" />
+                      <Badge variant="secondary" className="text-[10px] h-5 bg-muted text-muted-foreground">
+                        <Send className="h-2.5 w-2.5 mr-0.5" />
                         Telegram
                       </Badge>
                     )}
-                    <Badge variant="secondary" className="bg-muted text-muted-foreground">
+                    <Badge variant="secondary" className="text-[10px] h-5 bg-muted text-muted-foreground font-mono">
                       v{agent.version}
                     </Badge>
                   </div>
                   {agent.description && (
-                    <p className="text-xs text-muted-foreground mt-3 line-clamp-2">
+                    <p className="text-[11px] text-muted-foreground mt-2 line-clamp-2">
                       {agent.description}
                     </p>
                   )}
@@ -394,14 +425,14 @@ export function DashboardView() {
 
           {/* Create New Agent Card */}
           <Card
-            className="border-dashed border-2 hover:border-emerald-500/50 transition-colors cursor-pointer"
+            className="border-dashed border-2 hover:border-foreground/20 transition-colors cursor-pointer"
             onClick={() => setCreateOpen(true)}
           >
             <CardContent className="flex flex-col items-center justify-center py-8">
-              <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center mb-2">
-                <Plus className="h-5 w-5 text-muted-foreground" />
+              <div className="h-9 w-9 rounded-md bg-muted flex items-center justify-center mb-2">
+                <Plus className="h-4 w-4 text-muted-foreground" />
               </div>
-              <span className="text-sm text-muted-foreground">New Agent</span>
+              <span className="text-xs text-muted-foreground">New Agent</span>
             </CardContent>
           </Card>
         </div>

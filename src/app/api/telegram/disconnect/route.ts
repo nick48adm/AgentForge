@@ -23,7 +23,7 @@ export async function DELETE(req: NextRequest) {
     await db.channel.deleteMany({ where: { agentId, type: 'telegram' } })
 
     return NextResponse.json({ success: true, message: 'Telegram bot disconnected' })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Unknown error" }, { status: 500 })
   }
 }

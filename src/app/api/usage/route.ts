@@ -9,41 +9,55 @@ export async function GET(req: NextRequest) {
   try {
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
 
-    const usageLogs = await db.usageLog.findMany({
-      where: { userId: auth.user.id, createdAt: { gte: thirtyDaysAgo } },
-      orderBy: { createdAt: 'desc' },
-      take: 1000,
-    })
+    // Use SQL-level aggregation for better performance
+    const [dailyAgg, summaryAgg, agentCount, publishedCount, conversationCount, recentLogs] = await Promise.all([
+      db.usageLog.groupBy({
+        by: ['createdAt'],
+        where: { userId: auth.user.id, createdAt: { gte: thirtyDaysAgo } },
+        _sum: { tokensIn: true, tokensOut: true, cost: true },
+        _count: true,
+      }),
+      db.usageLog.aggregate({
+        where: { userId: auth.user.id, createdAt: { gte: thirtyDaysAgo } },
+        _sum: { tokensIn: true, tokensOut: true, cost: true },
+        _count: true,
+      }),
+      db.agent.count({ where: { userId: auth.user.id } }),
+      db.agent.count({ where: { userId: auth.user.id, status: 'published' } }),
+      db.conversation.count({ where: { userId: auth.user.id } }),
+      db.usageLog.findMany({
+        where: { userId: auth.user.id, createdAt: { gte: thirtyDaysAgo } },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      }),
+    ])
 
-    // Daily aggregation
+    // Build daily map from grouped results
     const dailyMap: Record<string, { tokensIn: number; tokensOut: number; cost: number; count: number }> = {}
-    for (const log of usageLogs) {
-      const day = log.createdAt.toISOString().slice(0, 10)
+    for (const row of dailyAgg) {
+      const day = row.createdAt.toISOString().slice(0, 10)
       if (!dailyMap[day]) dailyMap[day] = { tokensIn: 0, tokensOut: 0, cost: 0, count: 0 }
-      dailyMap[day].tokensIn += log.tokensIn
-      dailyMap[day].tokensOut += log.tokensOut
-      dailyMap[day].cost += log.cost
-      dailyMap[day].count++
+      dailyMap[day].tokensIn += row._sum.tokensIn || 0
+      dailyMap[day].tokensOut += row._sum.tokensOut || 0
+      dailyMap[day].cost += row._sum.cost || 0
+      dailyMap[day].count += row._count
     }
-
-    const agentCount = await db.agent.count({ where: { userId: auth.user.id } })
-    const publishedCount = await db.agent.count({ where: { userId: auth.user.id, status: 'published' } })
-    const conversationCount = await db.conversation.count({ where: { userId: auth.user.id } })
 
     return NextResponse.json({
       summary: {
-        totalMessages: usageLogs.length,
-        totalTokensIn: usageLogs.reduce((s, l) => s + l.tokensIn, 0),
-        totalTokensOut: usageLogs.reduce((s, l) => s + l.tokensOut, 0),
-        totalCost: usageLogs.reduce((s, l) => s + l.cost, 0),
+        totalMessages: summaryAgg._count,
+        totalTokensIn: summaryAgg._sum.tokensIn || 0,
+        totalTokensOut: summaryAgg._sum.tokensOut || 0,
+        totalCost: summaryAgg._sum.cost || 0,
         agentCount,
         publishedCount,
         conversationCount,
       },
       dailyUsage: dailyMap,
-      recentUsage: usageLogs.slice(0, 20),
+      recentUsage: recentLogs,
     })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    console.error('[usage]', error)
+    return NextResponse.json({ error: 'Failed to fetch usage data' }, { status: 500 })
   }
 }

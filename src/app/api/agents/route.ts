@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAuth } from '@/lib/session'
+import { createAgentSchema } from '@/lib/validations'
 
 export async function GET(req: NextRequest) {
   const auth = await requireAuth()
@@ -16,8 +17,9 @@ export async function GET(req: NextRequest) {
       },
     })
     return NextResponse.json(agents)
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    console.error('[agents GET]', error)
+    return NextResponse.json({ error: 'Failed to fetch agents' }, { status: 500 })
   }
 }
 
@@ -27,11 +29,14 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json()
-    const { name, description, systemPrompt, model, temperature, tools, avatar } = body
-
-    if (!name?.trim()) {
-      return NextResponse.json({ error: 'Agent name is required' }, { status: 400 })
+    const parsed = createAgentSchema.safeParse(body)
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues.map(i => i.message).join(', ') },
+        { status: 400 }
+      )
     }
+    const { name, description, systemPrompt, model, temperature, tools, avatar } = parsed.data
 
     // Plan limits: free = 3 agents, pro = 20, enterprise = unlimited
     const planLimits: Record<string, number> = { free: 3, pro: 20, enterprise: 9999 }
@@ -47,12 +52,12 @@ export async function POST(req: NextRequest) {
     const agent = await db.agent.create({
       data: {
         userId: auth.user.id,
-        name: name.trim(),
+        name,
         description: description || '',
         systemPrompt: systemPrompt || '',
         model: model || 'llama-3.3-70b-versatile',
         temperature: temperature ?? 0.7,
-        tools: JSON.stringify(tools || []),
+        tools: tools || [],
         avatar: avatar || null,
         status: 'draft',
         version: 1,
@@ -60,7 +65,8 @@ export async function POST(req: NextRequest) {
     })
 
     return NextResponse.json(agent, { status: 201 })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    console.error('[agents POST]', error)
+    return NextResponse.json({ error: 'Failed to create agent' }, { status: 500 })
   }
 }

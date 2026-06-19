@@ -13,12 +13,15 @@ interface Window {
 const store = new Map<string, Window>()
 
 // Clean up old entries every 5 minutes to prevent memory leak
-setInterval(() => {
+const cleanupInterval = setInterval(() => {
   const now = Date.now()
   for (const [key, win] of store) {
     if (win.resetAt < now) store.delete(key)
   }
 }, 5 * 60 * 1000)
+
+// Allow the process to exit even with the interval running
+if (cleanupInterval.unref) cleanupInterval.unref()
 
 export interface RateLimitResult {
   allowed: boolean
@@ -60,4 +63,9 @@ export function authLimit(ip: string) {
 /** Admin endpoints: 60 req/min per user */
 export function adminLimit(userId: string) {
   return rateLimit(`admin:${userId}`, 60, 60_000)
+}
+
+/** Widget public endpoints: 20 req/min per IP */
+export function widgetLimit(ip: string) {
+  return rateLimit(`widget:${ip}`, 20, 60_000)
 }
