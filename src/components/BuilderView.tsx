@@ -58,6 +58,8 @@ interface AgentConfig {
   tools: string[]
   status: string
   version: number
+  byokProvider?: string | null
+  byokApiKey?: string | null
   telegramConnection?: {
     botToken: string
     botUsername: string | null
@@ -91,9 +93,11 @@ export function BuilderView() {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [systemPrompt, setSystemPrompt] = useState('')
-  const [model, setModel] = useState('llama-3.3-70b-versatile')
+  const [model, setModel] = useState('deepseek-ai/deepseek-v4-flash')
   const [temperature, setTemperature] = useState(0.7)
   const [tools, setTools] = useState<string[]>([])
+  const [byokProvider, setByokProvider] = useState<string | null>(null)
+  const [byokApiKey, setByokApiKey] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'config' | 'knowledge' | 'telegram' | 'discord' | 'whatsapp' | 'widget'>('config')
 
   // Chat state
@@ -155,9 +159,11 @@ export function BuilderView() {
           setName(data.name)
           setDescription(data.description || '')
           setSystemPrompt(data.systemPrompt || '')
-          setModel(data.model || 'llama-3.3-70b-versatile')
+          setModel(data.model || 'deepseek-ai/deepseek-v4-flash')
           setTemperature(data.temperature ?? 0.7)
           setTools(JSON.parse(data.tools || '[]'))
+          setByokProvider(data.byokProvider || null)
+          setByokApiKey(data.byokApiKey || null)
         }
       } catch {}
       setLoading(false)
@@ -176,9 +182,11 @@ export function BuilderView() {
         setName(data.name)
         setDescription(data.description || '')
         setSystemPrompt(data.systemPrompt || '')
-        setModel(data.model || 'llama-3.3-70b-versatile')
+        setModel(data.model || 'deepseek-ai/deepseek-v4-flash')
         setTemperature(data.temperature ?? 0.7)
         setTools(JSON.parse(data.tools || '[]'))
+        setByokProvider(data.byokProvider || null)
+        setByokApiKey(data.byokApiKey || null)
       }
     } catch {}
   }
@@ -214,6 +222,8 @@ export function BuilderView() {
           model,
           temperature,
           tools,
+          byokProvider,
+          byokApiKey,
         }),
       })
       if (res.ok) {
@@ -661,11 +671,18 @@ export function BuilderView() {
                 {/* Model */}
                 <div className="space-y-1.5">
                   <Label className="text-xs font-medium">Model</Label>
-                  <ModelSelector value={model} onChange={(newModel) => {
-                    setModel(newModel)
-                    setChatMessages([])
-                    setConversationId(null)
-                  }} />
+                  <ModelSelector
+                    value={model}
+                    onChange={(newModel) => {
+                      setModel(newModel)
+                      setChatMessages([])
+                      setConversationId(null)
+                    }}
+                    byokProvider={byokProvider}
+                    onByokProviderChange={setByokProvider}
+                    byokApiKey={byokApiKey}
+                    onByokApiKeyChange={setByokApiKey}
+                  />
                 </div>
 
                 {/* Temperature */}

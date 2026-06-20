@@ -24,6 +24,8 @@ export const createAgentSchema = z.object({
   temperature: z.number().min(0).max(2).optional(),
   tools: z.array(z.string()).optional(),
   avatar: z.string().max(500).optional(),
+  byokProvider: z.enum(['nvidia-nim', 'openrouter', 'groq']).nullable().optional(),
+  byokApiKey: z.string().max(500).nullable().optional(),
 })
 
 export const updateAgentSchema = z.object({
@@ -34,6 +36,8 @@ export const updateAgentSchema = z.object({
   temperature: z.number().min(0).max(2).optional(),
   tools: z.array(z.string()).optional(),
   avatar: z.string().max(500).nullable().optional(),
+  byokProvider: z.enum(['nvidia-nim', 'openrouter', 'groq']).nullable().optional(),
+  byokApiKey: z.string().max(500).nullable().optional(),
 })
 
 export const chatSchema = z.object({

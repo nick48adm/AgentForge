@@ -1,86 +1,63 @@
 import { NextResponse } from 'next/server'
 import { requireAuth } from '@/lib/session'
 
-interface GroqModel {
+interface ModelInfo {
   id: string
-  owned_by: string
+  label: string
+  description: string
 }
 
-// ── Static NVIDIA NIM models ──────────────────────────────────────────────────
-const NVIDIA_NIM_MODELS = [
-  { id: 'moonshotai/kimi-k2.6', label: 'Kimi 2.6', description: 'Moonshot reasoning model' },
+// ── NVIDIA NIM models (server-key, free for users) ────────────────────────────
+const NIM_MODELS: ModelInfo[] = [
+  { id: 'moonshotai/kimi-k2.6', label: 'Kimi K2.6', description: 'Moonshot reasoning model' },
   { id: 'z-ai/glm-5.1', label: 'GLM 5.1', description: 'Z-AI agentic model' },
   { id: 'deepseek-ai/deepseek-v4-pro', label: 'DeepSeek V4 Pro', description: '1M context reasoning model' },
   { id: 'deepseek-ai/deepseek-v4-flash', label: 'DeepSeek V4 Flash', description: 'Fast MoE model' },
 ]
 
-// ── Static OpenAI models ───────────────────────────────────────────────────────
-const OPENAI_MODELS = [
-  { id: 'gpt-4o', label: 'GPT-4o', description: 'OpenAI multimodal flagship' },
-  { id: 'gpt-4o-mini', label: 'GPT-4o Mini', description: 'Fast & affordable GPT-4o' },
-  { id: 'o4-mini', label: 'o4 Mini', description: 'OpenAI fast reasoning model' },
+// ── BYOK provider model catalogues ────────────────────────────────────────────
+const BYOK_NVIDIA_NIM_MODELS: ModelInfo[] = [
+  { id: 'moonshotai/kimi-k2.6', label: 'Kimi K2.6', description: 'Moonshot reasoning model' },
+  { id: 'z-ai/glm-5.1', label: 'GLM 5.1', description: 'Z-AI agentic model' },
+  { id: 'deepseek-ai/deepseek-v4-pro', label: 'DeepSeek V4 Pro', description: '1M context reasoning' },
+  { id: 'deepseek-ai/deepseek-v4-flash', label: 'DeepSeek V4 Flash', description: 'Fast MoE model' },
+  { id: 'meta/llama-3.3-70b-instruct', label: 'Llama 3.3 70B', description: 'Meta open-weight model' },
+  { id: 'nvidia/llama-3.1-nemotron-ultra-253b-v1', label: 'Nemotron Ultra 253B', description: 'NVIDIA flagship reasoning' },
 ]
 
-// ── Static Anthropic models ────────────────────────────────────────────────────
-const ANTHROPIC_MODELS = [
-  { id: 'claude-sonnet-4-5', label: 'Claude Sonnet 4.5', description: 'Anthropic Sonnet — fast & smart' },
-  { id: 'claude-opus-4-5', label: 'Claude Opus 4.5', description: 'Anthropic Opus — most capable' },
+const BYOK_OPENROUTER_MODELS: ModelInfo[] = [
+  { id: 'google/gemini-2.5-pro-preview', label: 'Gemini 2.5 Pro', description: 'Google flagship model' },
+  { id: 'google/gemini-2.5-flash-preview', label: 'Gemini 2.5 Flash', description: 'Google fast model' },
+  { id: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4', description: 'Anthropic balanced model' },
+  { id: 'anthropic/claude-opus-4', label: 'Claude Opus 4', description: 'Anthropic most capable' },
+  { id: 'openai/gpt-4o', label: 'GPT-4o', description: 'OpenAI multimodal flagship' },
+  { id: 'openai/o4-mini', label: 'o4 Mini', description: 'OpenAI fast reasoning' },
+  { id: 'deepseek/deepseek-r1', label: 'DeepSeek R1', description: 'DeepSeek reasoning model' },
+  { id: 'meta-llama/llama-4-maverick', label: 'Llama 4 Maverick', description: 'Meta latest model' },
 ]
 
-// ── Groq model cache (5 minutes) ──────────────────────────────────────────────
-let groqCache: { data: GroqModel[]; expiresAt: number } | null = null
-const CACHE_TTL_MS = 5 * 60 * 1000
-
-async function fetchGroqModels(): Promise<GroqModel[]> {
-  if (groqCache && Date.now() < groqCache.expiresAt) {
-    return groqCache.data
-  }
-
-  const apiKey = process.env.GROQ_API_KEY
-  if (!apiKey) return []
-
-  try {
-    const res = await fetch('https://api.groq.com/openai/v1/models', {
-      headers: { Authorization: `Bearer ${apiKey}` },
-      signal: AbortSignal.timeout(10000),
-    })
-
-    if (!res.ok) {
-      console.error(`[models] Groq API error: ${res.status}`)
-      return groqCache?.data || []
-    }
-
-    const json = await res.json()
-    // Filter out audio/whisper models — only keep text chat models
-    const models: GroqModel[] = (json.data || [])
-      .filter((m: Record<string, unknown>) =>
-        typeof m.id === 'string' && !m.id.includes('whisper') && !m.id.includes('distil-whisper')
-      )
-      .map((m: Record<string, unknown>) => ({
-        id: String(m.id),
-        owned_by: String(m.owned_by ?? 'unknown'),
-      }))
-      .sort((a: GroqModel, b: GroqModel) => a.id.localeCompare(b.id))
-
-    groqCache = { data: models, expiresAt: Date.now() + CACHE_TTL_MS }
-    return models
-  } catch (e: unknown) {
-    console.error('[models] Failed to fetch Groq models:', e instanceof Error ? e.message : 'Unknown error')
-    return groqCache?.data || []
-  }
-}
+const BYOK_GROQ_MODELS: ModelInfo[] = [
+  { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B', description: 'Meta — fast inference on Groq' },
+  { id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B', description: 'Ultra-fast small model' },
+  { id: 'mixtral-8x7b-32768', label: 'Mixtral 8x7B', description: 'Mistral MoE model' },
+  { id: 'gemma2-9b-it', label: 'Gemma 2 9B', description: 'Google open model' },
+  { id: 'deepseek-r1-distill-llama-70b', label: 'DeepSeek R1 70B', description: 'DeepSeek reasoning distilled' },
+  { id: 'qwen-qwq-32b', label: 'Qwen QwQ 32B', description: 'Alibaba reasoning model' },
+]
 
 // ── Route handler ─────────────────────────────────────────────────────────────
 export async function GET() {
   const auth = await requireAuth()
   if (auth.response) return auth.response
 
-  const groq = await fetchGroqModels()
-
   return NextResponse.json({
-    groq,
-    nvidia_nim: NVIDIA_NIM_MODELS,
-    openai: process.env.OPENAI_API_KEY ? OPENAI_MODELS : [],
-    anthropic: process.env.ANTHROPIC_API_KEY ? ANTHROPIC_MODELS : [],
+    // Server-key NVIDIA NIM models (always available)
+    nim: process.env.NVIDIA_NIM_API_KEY ? NIM_MODELS : [],
+    // BYOK catalogues (always returned — client shows them when user enters a key)
+    byok: {
+      'nvidia-nim': BYOK_NVIDIA_NIM_MODELS,
+      openrouter: BYOK_OPENROUTER_MODELS,
+      groq: BYOK_GROQ_MODELS,
+    },
   })
 }

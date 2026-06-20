@@ -57,6 +57,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (data.temperature !== undefined) updateData.temperature = data.temperature
     if (data.tools !== undefined) updateData.tools = data.tools
     if (data.avatar !== undefined) updateData.avatar = data.avatar
+    if (data.byokProvider !== undefined) updateData.byokProvider = data.byokProvider
+    if (data.byokApiKey !== undefined) updateData.byokApiKey = data.byokApiKey
 
     if (Object.keys(updateData).length === 0) {
       return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
@@ -71,6 +73,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       if (updateData.temperature !== undefined) sandboxUpdate.temperature = updateData.temperature
       if (updateData.tools !== undefined) sandboxUpdate.tools = JSON.stringify(updateData.tools)
       if (updateData.model !== undefined) sandboxUpdate.model = updateData.model
+      if (updateData.byokProvider !== undefined) sandboxUpdate.byokProvider = updateData.byokProvider
+      if (updateData.byokApiKey !== undefined) sandboxUpdate.byokApiKey = updateData.byokApiKey
       if (Object.keys(sandboxUpdate).length > 0) {
         reconfigureSandbox(existing.sandboxUrl, sandboxUpdate, existing.sandboxSecret ?? undefined).catch(e =>
           console.error('[agent-patch] reconfigure failed:', e)

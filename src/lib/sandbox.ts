@@ -67,7 +67,7 @@ function validatePath(path: string): void {
 export async function startSandbox(
   agentId: string,
   version: number,
-  agentConfig: { name: string; systemPrompt: string; model: string; temperature: number; tools: string }
+  agentConfig: { name: string; systemPrompt: string; model: string; temperature: number; tools: string; byokProvider?: string | null; byokApiKey?: string | null }
 ): Promise<SandboxInfo> {
   await ensureNetwork()
   await ensureSandboxImage()
@@ -92,15 +92,13 @@ export async function startSandbox(
     `-e AGENT_TOOLS=${esc(agentConfig.tools)}`,
     `-e INTERNAL_PORT=${INTERNAL_PORT}`,
     `-e SANDBOX_SECRET=${esc(sandboxSecret)}`,
-    // API keys — note: these are visible via `docker inspect` on the host.
-    // This is acceptable because the host admin already has access to these keys.
-    // In a multi-tenant cloud deployment, use per-user keys via a secrets vault.
-    `-e GROQ_API_KEY=${esc(process.env.GROQ_API_KEY || '')}`,
+    // Server-key API keys
     `-e NVIDIA_NIM_API_KEY=${esc(process.env.NVIDIA_NIM_API_KEY || '')}`,
-    `-e OPENAI_API_KEY=${esc(process.env.OPENAI_API_KEY || '')}`,
-    `-e ANTHROPIC_API_KEY=${esc(process.env.ANTHROPIC_API_KEY || '')}`,
     `-e SERPAPI_KEY=${esc(process.env.SERPAPI_KEY || '')}`,
     `-e BRAVE_SEARCH_KEY=${esc(process.env.BRAVE_SEARCH_KEY || '')}`,
+    // BYOK (Bring Your Own Key) — passed from agent config
+    `-e BYOK_PROVIDER=${esc(agentConfig.byokProvider || '')}`,
+    `-e BYOK_API_KEY=${esc(agentConfig.byokApiKey || '')}`,
   ]
 
   const cmd = [
@@ -186,7 +184,7 @@ export async function proxyChatToSandbox(
 
 export async function reconfigureSandbox(
   sandboxUrl: string,
-  config: { systemPrompt?: string; temperature?: number; tools?: string; model?: string },
+  config: { systemPrompt?: string; temperature?: number; tools?: string; model?: string; byokProvider?: string | null; byokApiKey?: string | null },
   secret?: string
 ): Promise<void> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }

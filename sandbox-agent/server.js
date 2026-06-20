@@ -35,9 +35,11 @@ const MAX_HERMES_PROCESSES = parseInt(process.env.MAX_HERMES_PROCESSES || '10', 
 let config = {
   name:         process.env.AGENT_NAME || 'Agent',
   systemPrompt: process.env.AGENT_SYSTEM_PROMPT || '',
-  model:        process.env.AGENT_MODEL || 'llama-3.3-70b-versatile',
+  model:        process.env.AGENT_MODEL || 'deepseek-ai/deepseek-v4-flash',
   temperature:  parseFloat(process.env.AGENT_TEMPERATURE || '0.7'),
   tools:        (() => { try { return JSON.parse(process.env.AGENT_TOOLS || '[]') } catch { return [] } })(),
+  byokProvider: process.env.BYOK_PROVIDER || null,   // 'nvidia-nim' | 'openrouter' | 'groq' | null
+  byokApiKey:   process.env.BYOK_API_KEY || null,     // user's own API key
 }
 
 mkdirSync(WORKSPACE, { recursive: true })
@@ -49,17 +51,9 @@ function writeHermesConfig() {
   const cfgDir = path.join(HERMES_HOME, '.hermes')
   mkdirSync(cfgDir, { recursive: true })
 
-  // Determine provider from model name
-  const nimModels = ['moonshotai/kimi-k2.6', 'z-ai/glm-5.1', 'deepseek-ai/deepseek-v4-pro', 'deepseek-ai/deepseek-v4-flash']
-  const anthropicModels = ['claude-']
-  let provider = 'groq'
-  if (nimModels.includes(config.model)) {
-    provider = 'nvidia-nim'
-  } else if (anthropicModels.some(p => config.model.startsWith(p))) {
-    provider = 'anthropic'
-  } else if (config.model.startsWith('gpt-') || config.model.startsWith('o1') || config.model.startsWith('o3') || config.model.startsWith('o4')) {
-    provider = 'openai'
-  }
+  // Determine provider: BYOK provider or default to nvidia-nim (server key)
+  const provider = config.byokProvider || 'nvidia-nim'
+  const apiKey = config.byokApiKey || process.env.NVIDIA_NIM_API_KEY || ''
 
   // Build YAML config for hermes
   const cfg = `
@@ -69,14 +63,12 @@ temperature: ${config.temperature}
 workspace: ${WORKSPACE}
 
 providers:
-  groq:
-    api_key: "${process.env.GROQ_API_KEY || ''}"
-  openai:
-    api_key: "${process.env.OPENAI_API_KEY || ''}"
-  anthropic:
-    api_key: "${process.env.ANTHROPIC_API_KEY || ''}"
   nvidia-nim:
-    api_key: "${process.env.NVIDIA_NIM_API_KEY || ''}"
+    api_key: "${provider === 'nvidia-nim' ? apiKey : process.env.NVIDIA_NIM_API_KEY || ''}"
+  openrouter:
+    api_key: "${provider === 'openrouter' ? apiKey : ''}"
+  groq:
+    api_key: "${provider === 'groq' ? apiKey : ''}"
 
 tools:
   enabled: [${Array.isArray(config.tools) ? config.tools.map(t => `"${t}"`).join(', ') : ''}]
@@ -107,8 +99,6 @@ function getHermesEnv() {
     HERMES_HOME,
     PATH: `/opt/hermes-agent/.venv/bin:${process.env.PATH}`,
     PYTHONPATH: HERMES_DIR,
-    GROQ_API_KEY: process.env.GROQ_API_KEY || '',
-    OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
     NVIDIA_NIM_API_KEY: process.env.NVIDIA_NIM_API_KEY || '',
     SERPAPI_KEY: process.env.SERPAPI_KEY || '',
     BRAVE_SEARCH_KEY: process.env.BRAVE_SEARCH_KEY || '',
@@ -244,20 +234,19 @@ async function chatWithHermesProcess(userId, message, conversationHistory) {
 }
 
 // ── Direct LLM fallback (used when hermes process unavailable) ─────────────────
-const NIM_MODELS = ['moonshotai/kimi-k2.6', 'z-ai/glm-5.1', 'deepseek-ai/deepseek-v4-pro', 'deepseek-ai/deepseek-v4-flash']
+// All providers use OpenAI-compatible chat/completions endpoint.
+const PROVIDER_ENDPOINTS = {
+  'nvidia-nim': 'https://integrate.api.nvidia.com/v1/chat/completions',
+  'openrouter': 'https://openrouter.ai/api/v1/chat/completions',
+  'groq':       'https://api.groq.com/openai/v1/chat/completions',
+}
 
 function getLLMEndpoint() {
-  if (NIM_MODELS.includes(config.model)) {
-    return { endpoint: 'https://integrate.api.nvidia.com/v1/chat/completions', apiKey: process.env.NVIDIA_NIM_API_KEY || '', provider: 'nim' }
-  }
-  if (config.model.startsWith('claude-')) {
-    return { endpoint: 'https://api.anthropic.com/v1/messages', apiKey: process.env.ANTHROPIC_API_KEY || '', provider: 'anthropic' }
-  }
-  const m = config.model.toLowerCase()
-  if (m.startsWith('gpt-') || m.startsWith('o1') || m.startsWith('o3') || m.startsWith('o4')) {
-    return { endpoint: 'https://api.openai.com/v1/chat/completions', apiKey: process.env.OPENAI_API_KEY || '', provider: 'openai' }
-  }
-  return { endpoint: 'https://api.groq.com/openai/v1/chat/completions', apiKey: process.env.GROQ_API_KEY || '', provider: 'groq' }
+  // BYOK provider takes priority, otherwise default to nvidia-nim (server key)
+  const provider = config.byokProvider || 'nvidia-nim'
+  const endpoint = PROVIDER_ENDPOINTS[provider] || PROVIDER_ENDPOINTS['nvidia-nim']
+  const apiKey = config.byokApiKey || process.env.NVIDIA_NIM_API_KEY || ''
+  return { endpoint, apiKey, provider }
 }
 
 const TOOL_DEFINITIONS = [
@@ -420,7 +409,11 @@ async function executeTool(name, args) {
 
 async function directLLMChat(message, conversationHistory) {
   const { endpoint, apiKey, provider } = getLLMEndpoint()
-  if (!apiKey) throw new Error('No LLM API key configured in sandbox')
+  if (!apiKey) throw new Error(
+    config.byokProvider
+      ? `No API key provided for BYOK provider "${config.byokProvider}". Please enter your API key.`
+      : 'No NVIDIA NIM API key configured on the server. Set NVIDIA_NIM_API_KEY in .env.'
+  )
 
   const llmMessages = []
   if (config.systemPrompt) llmMessages.push({ role: 'system', content: config.systemPrompt })
@@ -429,22 +422,15 @@ async function directLLMChat(message, conversationHistory) {
   }
   llmMessages.push({ role: 'user', content: message })
 
-  // Anthropic uses a different API shape — handle separately
-  if (provider === 'anthropic') {
-    const systemMsg = llmMessages.find(m => m.role === 'system')
-    const conversationMsgs = llmMessages.filter(m => m.role !== 'system')
-    const body = { model: config.model, max_tokens: 4096, temperature: config.temperature, messages: conversationMsgs }
-    if (systemMsg) body.system = systemMsg.content
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(55000),
-    })
-    if (!res.ok) throw new Error(`Anthropic API ${res.status}: ${await res.text()}`)
-    const data = await res.json()
-    const text = data.content?.find(b => b.type === 'text')?.text || ''
-    return { content: text, tokensIn: data.usage?.input_tokens || 0, tokensOut: data.usage?.output_tokens || 0 }
+  // Build headers — all providers use OpenAI-compatible API
+  const headers = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${apiKey}`,
+  }
+  // OpenRouter expects extra headers
+  if (provider === 'openrouter') {
+    headers['HTTP-Referer'] = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+    headers['X-Title'] = 'AgentForge'
   }
 
   const enabledTools = Array.isArray(config.tools) ? config.tools : []
@@ -455,16 +441,16 @@ async function directLLMChat(message, conversationHistory) {
   const body = { model: config.model, messages: llmMessages, temperature: config.temperature }
   if (toolDefs.length > 0) body.tools = toolDefs
 
-  // Agentic tool loop — up to 5 rounds (OpenAI-compatible APIs only)
+  // Agentic tool loop — up to 5 rounds (all providers use OpenAI-compatible API)
   let currentMessages = [...llmMessages]
   for (let round = 0; round < 5; round++) {
     const res = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      headers,
       body: JSON.stringify({ ...body, messages: currentMessages }),
       signal: AbortSignal.timeout(55000),
     })
-    if (!res.ok) throw new Error(`LLM API ${res.status}: ${await res.text()}`)
+    if (!res.ok) throw new Error(`LLM API (${provider}) ${res.status}: ${await res.text()}`)
 
     const data = await res.json()
     const choice = data.choices?.[0]
@@ -540,6 +526,8 @@ const server = http.createServer(async (req, res) => {
       if (body.temperature !== undefined)  config.temperature = parseFloat(body.temperature)
       if (body.model       !== undefined)  config.model = body.model
       if (body.tools       !== undefined)  config.tools = typeof body.tools === 'string' ? JSON.parse(body.tools) : body.tools
+      if (body.byokProvider !== undefined) config.byokProvider = body.byokProvider || null
+      if (body.byokApiKey  !== undefined)  config.byokApiKey = body.byokApiKey || null
       // Rewrite hermes config on hot-reload
       writeHermesConfig()
       // Kill existing hermes processes so they pick up new config

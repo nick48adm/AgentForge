@@ -87,14 +87,14 @@ export async function POST(req: NextRequest) {
       } catch (e: unknown) {
         const errMsg = e instanceof Error ? e.message : 'Unknown error'
         console.error('[chat] sandbox error, falling back:', errMsg)
-        const result = await directLLMWithTools(agent.systemPrompt, agent.model, agent.temperature, messages, knowledgeContext, agent.tools as string[])
+        const result = await directLLMWithTools(agent.systemPrompt, agent.model, agent.temperature, messages, knowledgeContext, agent.tools as string[], agent.byokProvider, agent.byokApiKey)
         assistantContent = result.content
         tokensIn = result.tokensIn
         tokensOut = result.tokensOut
       }
     } else {
       // Draft / preview — with tool execution
-      const result = await directLLMWithTools(agent.systemPrompt, agent.model, agent.temperature, messages, knowledgeContext, agent.tools as string[])
+      const result = await directLLMWithTools(agent.systemPrompt, agent.model, agent.temperature, messages, knowledgeContext, agent.tools as string[], agent.byokProvider, agent.byokApiKey)
       assistantContent = result.content
       tokensIn = result.tokensIn
       tokensOut = result.tokensOut
@@ -125,6 +125,8 @@ async function directLLMWithTools(
   messages: Array<Record<string, unknown>>,
   knowledgeContext: string,
   agentTools: unknown,
+  byokProvider?: string | null,
+  byokApiKey?: string | null,
 ): Promise<{ content: string; tokensIn: number; tokensOut: number }> {
   // Parse enabled tools
   let enabledTools: string[] = []
@@ -134,7 +136,7 @@ async function directLLMWithTools(
 
   // If no tools enabled, use the simple direct LLM path
   if (enabledTools.length === 0) {
-    return directLLM(systemPrompt, model, temperature, messages, knowledgeContext)
+    return directLLM(systemPrompt, model, temperature, messages, knowledgeContext, byokProvider, byokApiKey)
   }
 
   // Build LLM messages with tool support
@@ -155,7 +157,7 @@ async function directLLMWithTools(
   // Agentic tool loop — up to MAX_TOOL_ROUNDS rounds
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     try {
-      const result = await chatCompletion(model, llmMessages, temperature, toolDefs.length > 0 ? toolDefs : undefined)
+      const result = await chatCompletion(model, llmMessages, temperature, toolDefs.length > 0 ? toolDefs : undefined, byokProvider, byokApiKey)
       totalTokensIn += result.tokensIn
       totalTokensOut += result.tokensOut
 
@@ -190,7 +192,7 @@ async function directLLMWithTools(
       const msg = e instanceof Error ? e.message : 'Unknown error'
       console.error('[chat] LLM with tools error:', msg)
       // Fall back to simple LLM call without tools
-      return directLLM(systemPrompt, model, temperature, messages, knowledgeContext)
+      return directLLM(systemPrompt, model, temperature, messages, knowledgeContext, byokProvider, byokApiKey)
     }
   }
 
@@ -204,6 +206,8 @@ async function directLLM(
   temperature: number,
   messages: Array<Record<string, unknown>>,
   knowledgeContext: string,
+  byokProvider?: string | null,
+  byokApiKey?: string | null,
 ): Promise<{ content: string; tokensIn: number; tokensOut: number }> {
   try {
     const llmMessages: LLMMessage[] = []
@@ -215,7 +219,7 @@ async function directLLM(
       const content = String(m.content ?? '')
       if (role === 'user' || role === 'assistant') llmMessages.push({ role, content })
     }
-    const result = await chatCompletion(model, llmMessages, temperature)
+    const result = await chatCompletion(model, llmMessages, temperature, undefined, byokProvider, byokApiKey)
     return {
       content: result.content || 'Unable to generate a response.',
       tokensIn: result.tokensIn,

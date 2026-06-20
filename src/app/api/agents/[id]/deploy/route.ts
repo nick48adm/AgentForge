@@ -78,6 +78,8 @@ interface AgentWithTelegram {
   temperature: number
   tools: unknown
   version: number
+  byokProvider?: string | null
+  byokApiKey?: string | null
   telegramConnection?: { botToken: string } | null
 }
 
@@ -98,6 +100,8 @@ async function runDeploy(agent: AgentWithTelegram, jobId: string, version: numbe
       model: agent.model,
       temperature: agent.temperature,
       tools: typeof agent.tools === 'string' ? agent.tools : JSON.stringify(agent.tools),
+      byokProvider: agent.byokProvider,
+      byokApiKey: agent.byokApiKey,
     })
 
     await appendLog('deploying', 'Container started. Running health checks…\n')

@@ -92,9 +92,11 @@ model Agent {
   description        String              @default("")
   avatar             String?
   systemPrompt       String              @default("")
-  model              String              @default("llama-3.3-70b-versatile")
+  model              String              @default("deepseek-ai/deepseek-v4-flash")
   temperature        Float               @default(0.7)
   tools              Json                @default("[]")
+  byokProvider       String?
+  byokApiKey         String?
   status             AgentStatus         @default(draft)
   version            Int                 @default(1)
   containerId        String?

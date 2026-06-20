@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       )
     }
-    const { name, description, systemPrompt, model, temperature, tools, avatar } = parsed.data
+    const { name, description, systemPrompt, model, temperature, tools, avatar, byokProvider, byokApiKey } = parsed.data
 
     // Plan limits: free = 3 agents, pro = 20, enterprise = unlimited
     const planLimits: Record<string, number> = { free: 3, pro: 20, enterprise: 9999 }
@@ -55,10 +55,12 @@ export async function POST(req: NextRequest) {
         name,
         description: description || '',
         systemPrompt: systemPrompt || '',
-        model: model || 'llama-3.3-70b-versatile',
+        model: model || 'deepseek-ai/deepseek-v4-flash',
         temperature: temperature ?? 0.7,
         tools: tools || [],
         avatar: avatar || null,
+        byokProvider: byokProvider || null,
+        byokApiKey: byokApiKey || null,
         status: 'draft',
         version: 1,
       },

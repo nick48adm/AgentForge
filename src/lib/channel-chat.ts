@@ -28,24 +28,33 @@ export interface ChannelResponse {
  * These are approximate and should be updated as providers change pricing.
  */
 const MODEL_COSTS: Record<string, { inputPer1K: number; outputPer1K: number }> = {
-  // Groq models (free tier)
-  'llama-3.3-70b-versatile': { inputPer1K: 0.00003, outputPer1K: 0.00006 },
-  'mixtral-8x7b-32768': { inputPer1K: 0.00003, outputPer1K: 0.00006 },
-  // OpenAI models
-  'gpt-4o': { inputPer1K: 0.0025, outputPer1K: 0.01 },
-  'gpt-4o-mini': { inputPer1K: 0.00015, outputPer1K: 0.0006 },
-  'o4-mini': { inputPer1K: 0.0015, outputPer1K: 0.006 },
-  // Anthropic models
-  'claude-sonnet-4-5': { inputPer1K: 0.003, outputPer1K: 0.015 },
-  'claude-opus-4-5': { inputPer1K: 0.015, outputPer1K: 0.075 },
-  // NVIDIA NIM models
+  // NVIDIA NIM models (server-key)
   'moonshotai/kimi-k2.6': { inputPer1K: 0.0006, outputPer1K: 0.002 },
+  'z-ai/glm-5.1': { inputPer1K: 0.0003, outputPer1K: 0.001 },
   'deepseek-ai/deepseek-v4-pro': { inputPer1K: 0.0006, outputPer1K: 0.002 },
   'deepseek-ai/deepseek-v4-flash': { inputPer1K: 0.0001, outputPer1K: 0.0004 },
+  'meta/llama-3.3-70b-instruct': { inputPer1K: 0.0003, outputPer1K: 0.001 },
+  'nvidia/llama-3.1-nemotron-ultra-253b-v1': { inputPer1K: 0.001, outputPer1K: 0.004 },
+  // BYOK OpenRouter models (approximate)
+  'google/gemini-2.5-pro-preview': { inputPer1K: 0.00125, outputPer1K: 0.01 },
+  'google/gemini-2.5-flash-preview': { inputPer1K: 0.00015, outputPer1K: 0.0006 },
+  'anthropic/claude-sonnet-4': { inputPer1K: 0.003, outputPer1K: 0.015 },
+  'anthropic/claude-opus-4': { inputPer1K: 0.015, outputPer1K: 0.075 },
+  'openai/gpt-4o': { inputPer1K: 0.0025, outputPer1K: 0.01 },
+  'openai/o4-mini': { inputPer1K: 0.0015, outputPer1K: 0.006 },
+  'deepseek/deepseek-r1': { inputPer1K: 0.0006, outputPer1K: 0.002 },
+  'meta-llama/llama-4-maverick': { inputPer1K: 0.0005, outputPer1K: 0.002 },
+  // BYOK Groq models (approximate — Groq charges for compute)
+  'llama-3.3-70b-versatile': { inputPer1K: 0.00006, outputPer1K: 0.00006 },
+  'llama-3.1-8b-instant': { inputPer1K: 0.00001, outputPer1K: 0.00001 },
+  'mixtral-8x7b-32768': { inputPer1K: 0.00003, outputPer1K: 0.00006 },
+  'gemma2-9b-it': { inputPer1K: 0.00002, outputPer1K: 0.00002 },
+  'deepseek-r1-distill-llama-70b': { inputPer1K: 0.0001, outputPer1K: 0.0001 },
+  'qwen-qwq-32b': { inputPer1K: 0.00003, outputPer1K: 0.00003 },
 }
 
 export function calculateCost(model: string, tokensIn: number, tokensOut: number): number {
-  const costs = MODEL_COSTS[model] || MODEL_COSTS['llama-3.3-70b-versatile']!
+  const costs = MODEL_COSTS[model] || MODEL_COSTS['deepseek-ai/deepseek-v4-flash']!
   return (tokensIn / 1000) * costs.inputPer1K + (tokensOut / 1000) * costs.outputPer1K
 }
 
@@ -112,7 +121,7 @@ async function directLLM(agent: Agent, text: string, knowledgeContext: string = 
       messages.push({ role: 'system', content: (agent.systemPrompt || '') + knowledgeContext })
     }
     messages.push({ role: 'user', content: text })
-    const result = await chatCompletion(agent.model, messages, agent.temperature)
+    const result = await chatCompletion(agent.model, messages, agent.temperature, undefined, agent.byokProvider, agent.byokApiKey)
     return {
       content: result.content || 'Sorry, I could not generate a response.',
       tokensIn: result.tokensIn,
