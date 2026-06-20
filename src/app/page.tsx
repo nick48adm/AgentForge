@@ -7,34 +7,31 @@ import { BuilderView } from '@/components/BuilderView'
 import { AdminView } from '@/components/AdminView'
 import { Navbar } from '@/components/Navbar'
 import { useEffect } from 'react'
+import { useSession } from 'next-auth/react'
 
 export default function Home() {
   const { view, isAuthenticated, setUser, setIsAuthenticated, setView } = useAppStore()
+  const { data: session, status } = useSession()
 
-  // Check for existing session on load
+  // Sync next-auth session with Zustand store
   useEffect(() => {
-    const checkSession = async () => {
-      try {
-        const res = await fetch('/api/auth/session')
-        if (res.ok) {
-          const session = await res.json()
-          if (session?.user) {
-            setUser({
-              id: (session.user as any).id,
-              name: session.user.name || '',
-              email: session.user.email || '',
-              role: (session.user as any).role || 'user',
-              plan: (session.user as any).plan || 'free',
-              image: session.user.image,
-            })
-            setIsAuthenticated(true)
-            setView('dashboard')
-          }
-        }
-      } catch {}
+    if (status === 'authenticated' && session?.user) {
+      setUser({
+        id: (session.user as any).id,
+        name: session.user.name || '',
+        email: session.user.email || '',
+        role: (session.user as any).role || 'user',
+        plan: (session.user as any).plan || 'free',
+        image: session.user.image,
+      })
+      setIsAuthenticated(true)
+      if (view === 'landing') setView('dashboard')
+    } else if (status === 'unauthenticated') {
+      setUser(null)
+      setIsAuthenticated(false)
+      if (view !== 'landing') setView('landing')
     }
-    checkSession()
-  }, [])
+  }, [status, session])
 
   const renderView = () => {
     switch (view) {

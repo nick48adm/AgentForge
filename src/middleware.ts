@@ -9,21 +9,19 @@ export default withAuth(
     callbacks: {
       authorized({ token, req }) {
         const path = req.nextUrl.pathname
-        const publicPaths = [
-          '/api/auth',
-          '/api/telegram/webhook',
-          '/api/channels/widget',   // widget script + widget chat — public
-          '/api/channels/whatsapp/webhook',
-          '/api/channels/discord/webhook',
-        ]
-        if (publicPaths.some(p => path.startsWith(p))) return true
+        // Public pages — always accessible
+        if (path === '/' || path === '/login' || path === '/signup') return true
+        // Static assets
+        if (path.startsWith('/_next') || path.startsWith('/api/auth')) return true
+        // Protected pages — require auth
+        if (path.startsWith('/settings')) return !!token
         return !!token
       },
     },
-    pages: { signIn: '/' },
+    pages: { signIn: '/login' },
   }
 )
 
 export const config = {
-  matcher: ['/api/admin/:path*'],
+  matcher: ['/settings/:path*'],
 }

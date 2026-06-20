@@ -9,7 +9,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   try {
     const body = await req.json()
-    const updateData: any = {}
+    const updateData: { plan?: string; role?: string } = {}
     if (body.plan !== undefined && ['free','pro','enterprise'].includes(body.plan)) updateData.plan = body.plan
     if (body.role !== undefined && ['user','admin'].includes(body.role)) updateData.role = body.role
 
@@ -17,10 +17,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       return NextResponse.json({ error: 'No valid fields' }, { status: 400 })
     }
 
-    const user = await db.user.update({ where: { id }, data: updateData })
+    const user = await db.user.update({ where: { id }, data: updateData as any })
     return NextResponse.json(user)
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Unknown error" }, { status: 500 })
   }
 }
 
@@ -37,7 +37,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   try {
     await db.user.delete({ where: { id } })
     return NextResponse.json({ success: true })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Unknown error" }, { status: 500 })
   }
 }

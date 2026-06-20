@@ -27,14 +27,13 @@ export async function requireAuth(): Promise<
   if (!session?.user) {
     return { response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
   }
-  const u = session.user as any
   return {
     user: {
-      id: u.id,
-      role: u.role ?? 'user',
-      plan: u.plan ?? 'free',
-      email: u.email,
-      name: u.name,
+      id: session.user.id,
+      role: session.user.role ?? 'user',
+      plan: session.user.plan ?? 'free',
+      email: session.user.email,
+      name: session.user.name,
     },
   }
 }

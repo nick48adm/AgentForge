@@ -8,6 +8,32 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum UserRole {
+  user
+  admin
+}
+
+enum UserPlan {
+  free
+  pro
+  enterprise
+}
+
+enum AgentStatus {
+  draft
+  deploying
+  published
+  stopped
+  failed
+}
+
+enum ChannelType {
+  telegram
+  whatsapp
+  discord
+  widget
+}
+
 model Account {
   id                String  @id @default(cuid())
   userId            String
@@ -47,8 +73,8 @@ model User {
   emailVerified DateTime?
   image         String?
   password      String?
-  role          String    @default("user")
-  plan          String    @default("free")
+  role          UserRole  @default(user)
+  plan          UserPlan  @default(free)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   accounts      Account[]
@@ -68,8 +94,8 @@ model Agent {
   systemPrompt       String              @default("")
   model              String              @default("llama-3.3-70b-versatile")
   temperature        Float               @default(0.7)
-  tools              String              @default("[]")
-  status             String              @default("draft")
+  tools              Json                @default("[]")
+  status             AgentStatus         @default(draft)
   version            Int                 @default(1)
   containerId        String?
   sandboxUrl         String?
@@ -94,7 +120,7 @@ model Conversation {
   agentId   String
   userId    String
   title     String   @default("New Chat")
-  messages  String   @default("[]")
+  messages  Json     @default("[]")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   agent     Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
@@ -123,7 +149,7 @@ model TelegramConnection {
   botName      String?
   webhookUrl   String?
   isActive     Boolean  @default(false)
-  allowedUsers String   @default("[]")
+  allowedUsers Json     @default("[]")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
   agent        Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
@@ -131,14 +157,14 @@ model TelegramConnection {
 
 // Unified multi-channel tracking (Telegram, WhatsApp, Discord, Widget)
 model Channel {
-  id        String   @id @default(cuid())
+  id        String      @id @default(cuid())
   agentId   String
-  type      String   // 'telegram' | 'whatsapp' | 'discord' | 'widget'
-  config    String   @default("{}") // JSON: tokens, phone numbers, webhook secrets, etc.
-  isActive  Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  agent     Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  type      ChannelType
+  config    Json        @default("{}")
+  isActive  Boolean     @default(false)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+  agent     Agent       @relation(fields: [agentId], references: [id], onDelete: Cascade)
   @@unique([agentId, type])
   @@index([agentId])
   @@index([type])

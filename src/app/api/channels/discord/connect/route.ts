@@ -40,8 +40,8 @@ export async function POST(req: NextRequest) {
       message: `Discord bot @${botInfo.username} connected. Set your interactions endpoint URL to:\n${process.env.NEXT_PUBLIC_APP_URL}/api/channels/discord/webhook/${agentId}`,
       webhookUrl: `${process.env.NEXT_PUBLIC_APP_URL}/api/channels/discord/webhook/${agentId}`,
     })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Unknown error" }, { status: 500 })
   }
 }
 
@@ -57,7 +57,7 @@ export async function DELETE(req: NextRequest) {
     }
     await db.channel.deleteMany({ where: { agentId, type: 'discord' } })
     return NextResponse.json({ success: true })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Unknown error" }, { status: 500 })
   }
 }

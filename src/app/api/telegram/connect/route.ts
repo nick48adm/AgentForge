@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
       success: true, botUsername, botName,
       message: `Connected to @${botUsername}. ${agent.status === 'published' ? 'Webhook is active!' : 'Deploy the agent to activate the webhook.'}`,
     })
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error: unknown) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Unknown error" }, { status: 500 })
   }
 }
