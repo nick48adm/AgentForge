@@ -10,5 +10,5 @@ docker-compose*.yml
 Dockerfile*
 Caddyfile
 setup.sh
-sandbox-agent/
+
 tsconfig.tsbuildinfo

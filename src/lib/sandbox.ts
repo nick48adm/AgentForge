@@ -30,7 +30,7 @@ export async function ensureNetwork(): Promise<void> {
   try {
     await execAsync(`docker network inspect ${SANDBOX_NETWORK}`)
   } catch {
-    await execAsync(`docker network create --driver bridge --internal ${SANDBOX_NETWORK}`)
+    await execAsync(`docker network create --driver bridge ${SANDBOX_NETWORK}`)
     console.info(`[sandbox] Created network: ${SANDBOX_NETWORK}`)
   }
 }

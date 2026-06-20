@@ -1,7 +1,5 @@
 # ── Stage 1: Build ──────────────────────────────────────────────────────────────
-FROM node:22-alpine AS builder
-
-RUN npm install -g bun
+FROM oven/bun:alpine AS builder
 
 WORKDIR /app
 
@@ -18,8 +16,8 @@ RUN bun run build
 # ── Stage 2: Production ────────────────────────────────────────────────────────
 FROM node:22-alpine
 
-# Install docker-cli for sandbox management
-RUN apk add --no-cache docker-cli dumb-init
+# Install docker-cli for sandbox
+RUN apk add --no-cache docker dumb-init
 
 # Run as non-root user for security
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup

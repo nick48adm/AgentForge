@@ -44,6 +44,15 @@ services:
       - agentforge-internal
     restart: unless-stopped
 
+  # Build sandbox agent image (not run as service — app launches containers dynamically)
+  sandbox-build:
+    build:
+      context: ./sandbox-agent
+      dockerfile: Dockerfile
+    image: agentforge-sandbox:latest
+    profiles: ["build"]
+    command: ["true"]
+
   app:
     build:
       context: .
@@ -53,6 +62,9 @@ services:
       DATABASE_URL: postgresql://agentforge:${POSTGRES_PASSWORD:-agentforge_password}@postgres:5432/agentforge
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?NEXTAUTH_SECRET must be set}
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      # Bind Next.js standalone server to all interfaces
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"
       # Point Docker client at the restricted proxy
       DOCKER_HOST: tcp://docker-proxy:2375
       SANDBOX_IMAGE: ${SANDBOX_IMAGE:-agentforge-sandbox:latest}
@@ -77,11 +89,9 @@ services:
         condition: service_healthy
       docker-proxy:
         condition: service_started
-    networks:
-      - agentforge-internal
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api"]
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:3000/api"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -90,6 +100,9 @@ services:
       resources:
         limits:
           memory: 1G
+    networks:
+      - agentforge-internal
+      - agentforge-sandbox-net
 
 volumes:
   postgres_data:
@@ -97,4 +110,7 @@ volumes:
 
 networks:
   agentforge-internal:
+    driver: bridge
+  agentforge-sandbox-net:
+    name: agentforge-sandbox-net
     driver: bridge
